@@ -1,6 +1,6 @@
 // الترجمة: النصوص مكتوبة بالعربية في الكود، وهذا القاموس يعطي المقابل الإنجليزي.
 // أي نص غير موجود هنا يظهر كما هو (مثل الأسماء التي يكتبها المستخدم).
-let LANG = (() => { try { return localStorage.getItem("lang") || "ar"; } catch { return "ar"; } })();
+let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
   // ----- الواجهة العامة -----
