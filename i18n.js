@@ -23,7 +23,7 @@ const EN = {
   "تسجيل الدخول": "Log in",
   "تسجيل الخروج": "Log out",
   "اسم المستخدم": "Username",
-  "اختر الاسم": "Choose a name",
+  "حفظ تسجيل الدخول لمدة 30 يوماً": "Stay logged in for 30 days",
   "كلمة السر": "Password",
   "دخول": "Log in",
   "اسم المستخدم أو كلمة السر غير صحيحة": "Incorrect username or password",

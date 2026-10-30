@@ -90,14 +90,12 @@ function renderLogin() {
     <form id="loginForm" class="card login-card">
       <h2>${t("تسجيل الدخول")}</h2>
       <div class="field"><label for="loginName">${t("اسم المستخدم")}</label>
-        <select class="input" id="loginName" name="username" required>
-          <option value="">${t("اختر الاسم")}</option>
-          ${(Store.loginNames || []).map((n) => `<option value="${esc(n)}">${esc(tv(n))}</option>`).join("")}
-        </select>
+        <input class="input" id="loginName" name="username" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
       </div>
       <div class="field"><label for="loginPass">${t("كلمة السر")}</label>
         <input class="input" id="loginPass" name="password" type="password" autocomplete="current-password" required dir="ltr">
       </div>
+      <label class="check"><input type="checkbox" name="remember"> ${t("حفظ تسجيل الدخول لمدة 30 يوماً")}</label>
       <button class="btn primary">${t("دخول")}</button>
     </form>`;
 }
@@ -1096,7 +1094,7 @@ document.addEventListener("submit", async (ev) => {
     const btn = f.querySelector("button");
     btn.disabled = true;
     try {
-      await Store.login(f.username.value, f.password.value);
+      await Store.login(f.username.value.trim(), f.password.value, f.remember.checked);
       state.users = null;
       setSync(syncLabel());
       render();

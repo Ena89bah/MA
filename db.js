@@ -100,15 +100,14 @@ const Store = {
     if (cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase) {
       this.client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
       this.mode = "supabase";
-      try { this.token = localStorage.getItem(TOKEN_KEY); } catch {}
+      // جلسة "حفظ الدخول" في localStorage، والجلسة العادية في sessionStorage وتنتهي بإغلاق المتصفح
+      try { this.token = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY); } catch {}
       if (this.token) {
         try {
           this.user = await this.rpc("app_me", { p_token: this.token });
           await this.reload();
-          return;
         } catch { this.forgetSession(); }
       }
-      this.loginNames = await this.rpc("app_login_names", {});
     } else {
       let raw = null;
       try { raw = localStorage.getItem(DB_KEY); } catch {}
@@ -131,12 +130,12 @@ const Store = {
 
   needsLogin() { return this.mode === "supabase" && !this.user; },
 
-  async login(name, password) {
-    const r = await this.rpc("app_login", { p_name: name, p_password: password });
+  async login(name, password, remember) {
+    const r = await this.rpc("app_login", { p_name: name, p_password: password, p_remember: remember });
     if (r.error) throw new Error(r.error);
     this.token = r.token;
     this.user = r.user;
-    try { localStorage.setItem(TOKEN_KEY, r.token); } catch {}
+    try { (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, r.token); } catch {}
     await this.reload();
   },
 
@@ -144,13 +143,12 @@ const Store = {
     this.token = null;
     this.user = null;
     this.data = emptyDB();
-    try { localStorage.removeItem(TOKEN_KEY); } catch {}
+    try { localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY); } catch {}
   },
 
   async logout() {
     try { await this.rpc("app_logout", { p_token: this.token }); } catch {}
     this.forgetSession();
-    this.loginNames = await this.rpc("app_login_names", {});
   },
 
   listUsers() { return this.rpc("app_list_users", { p_token: this.token }); },
