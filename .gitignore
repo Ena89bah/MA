@@ -1,0 +1,5 @@
+tools/
+data/
+.claude/
+# يحتوي كلمات السر الأولية
+supabase-setup.sql
