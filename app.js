@@ -4,7 +4,6 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const D = () => Store.data;
 
-const TYPE_LABEL = { activity: "الأنشطة", brand: "البراندات" };
 const TIERS = ["A", "B", "C", "D"];
 const ALL_CATS = "_all";
 const PAGE_SIZE = 60;
@@ -13,7 +12,6 @@ const tierBadge = (e) => (TIERS.includes(e.tier) ? `<span class="tier tier-${e.t
 const tierRank = (e) => (TIERS.includes(e.tier) ? TIERS.indexOf(e.tier) : TIERS.length);
 const state = {
   view: "directory",
-  catType: "activity",
   catId: null,
   search: "",
   tier: "", // فلتر قوة البراند
@@ -64,7 +62,7 @@ async function commit(msg) {
 }
 
 // ---------- الدخول والصلاحيات ----------
-const VIEWS = { directory: "التصنيفات والشركات", tasks: "المهام", employees: "الموظفين", sources: "مصادر البيانات", settings: "البيانات" };
+const VIEWS = { directory: "البراندات", tasks: "المهام", employees: "الموظفين", sources: "مصادر البيانات", settings: "البيانات" };
 const ROLES = { admin: "مدير", employee: "موظف", viewer: "مشاهد فقط" };
 const isAdmin = () => Store.mode !== "supabase" || Store.user?.role === "admin";
 const isViewer = () => Store.mode === "supabase" && Store.user?.role === "viewer";
@@ -178,27 +176,25 @@ const entVisible = (e) => isVisible(e) && isVisible(catById(e.categoryId) || {})
 function renderDirectory() {
   const hiddenCount = D().categories.filter((c) => c.hidden).length + D().entities.filter((e) => e.hidden).length;
   if (!hiddenCount) state.showHidden = false;
-  const allCats = D().categories.filter((c) => c.type === state.catType);
+  const allCats = D().categories;
   const cats = allCats.filter(isVisible);
-  const isBrand = state.catType === "brand";
-  if (!cats.find((c) => c.id === state.catId) && !(isBrand && state.catId === ALL_CATS)) state.catId = isBrand ? ALL_CATS : cats[0]?.id || null;
+  if (!cats.find((c) => c.id === state.catId)) state.catId = ALL_CATS;
   const q = state.search.trim().toLowerCase();
-  const typeCats = new Set(allCats.map((c) => c.id));
-  const tierOk = (e) => !isBrand || !state.tier || e.tier === state.tier;
+  const tierOk = (e) => !state.tier || (state.tier === "none" ? !TIERS.includes(e.tier) : e.tier === state.tier);
 
   const ents = (q
     ? D().entities.filter((e) =>
         [e.name, e.notes, ...e.contacts.flatMap((c) => [c.name, c.phone, c.email])].some((v) => String(v || "").toLowerCase().includes(q)))
-    : D().entities.filter((e) => (state.catId === ALL_CATS ? typeCats.has(e.categoryId) : e.categoryId === state.catId))
+    : D().entities.filter((e) => (state.catId === ALL_CATS || e.categoryId === state.catId))
   ).filter(entVisible).filter(tierOk);
-  if (isBrand) ents.sort((a, b) => tierRank(a) - tierRank(b) || (b.branches || 0) - (a.branches || 0));
+  ents.sort((a, b) => tierRank(a) - tierRank(b) || (b.branches || 0) - (a.branches || 0));
   const shown = ents.slice(0, state.limit);
 
-  const allItem = isBrand ? `
+  const allItem = `
         <div class="cat-item ${state.catId === ALL_CATS && !q ? "active" : ""}" data-action="pick-cat" data-id="${ALL_CATS}">
           <span class="name">${t("كل البراندات")}</span>
-          <span class="count">${D().entities.filter((e) => typeCats.has(e.categoryId) && entVisible(e) && tierOk(e)).length}</span>
-        </div>` : "";
+          <span class="count">${D().entities.filter((e) => entVisible(e) && tierOk(e)).length}</span>
+        </div>`;
   const sidebar = cats.length
     ? allItem + cats.map((c) => `
         <div class="cat-item ${c.id === state.catId && !q ? "active" : ""} ${c.hidden ? "is-hidden" : ""}" data-action="pick-cat" data-id="${c.id}">
@@ -220,19 +216,17 @@ function renderDirectory() {
 
   return `
     <div class="toolbar">
-      <div class="seg">
-        ${Object.entries(TYPE_LABEL).map(([k, v]) => `<button data-action="cat-type" data-type="${k}" class="${state.catType === k ? "active" : ""}">${t(v)}</button>`).join("")}
-      </div>
       <input class="input" id="search" type="search" enterkeyhint="search" autocomplete="off" placeholder="${t("🔍 بحث بالاسم أو الرقم أو الإيميل…")}" value="${esc(state.search)}" style="flex:1;min-width:200px">
       ${hiddenBtn}
       <button class="btn" data-action="new-cat">${t("+ تصنيف")}</button>
-      <button class="btn primary" data-action="new-ent">${state.catType === "brand" ? t("+ براند") : t("+ شركة")}</button>
+      <button class="btn primary" data-action="new-ent">${t("+ براند")}</button>
     </div>
-    ${isBrand ? `<div class="tier-filter" role="group" aria-label="${t("قوة البراند")}">
+    <div class="tier-filter" role="group" aria-label="${t("قوة البراند")}">
       <span class="task-meta">${t("قوة البراند")}</span>
       <button class="${state.tier ? "" : "active"}" data-action="filter-tier" data-v="">${t("الكل")}</button>
-      ${TIERS.map((x) => `<button class="tier-chip tier-${x.toLowerCase()} ${state.tier === x ? "active" : ""}" data-action="filter-tier" data-v="${x}">${x} <small>${D().entities.filter((e) => e.tier === x && typeCats.has(e.categoryId) && entVisible(e)).length}</small></button>`).join("")}
-    </div>` : ""}
+      ${TIERS.map((x) => `<button class="tier-chip tier-${x.toLowerCase()} ${state.tier === x ? "active" : ""}" data-action="filter-tier" data-v="${x}">${x} <small>${D().entities.filter((e) => e.tier === x && entVisible(e)).length}</small></button>`).join("")}
+      <button class="${state.tier === "none" ? "active" : ""}" data-action="filter-tier" data-v="none">${t("بدون تصنيف")} <small>${D().entities.filter((e) => !TIERS.includes(e.tier) && entVisible(e)).length}</small></button>
+    </div>
     <div class="layout">
       <aside class="sidebar">${sidebar}</aside>
       <section class="grid">${cards}</section>
@@ -324,7 +318,7 @@ function entityDetails(e) {
       ${logoHtml(e, "logo detail-logo")}
       <div class="ent-title">
         <h3>${tierBadge(e)} ${esc(e.name)}</h3>
-        <small>${esc(tv(cat?.name || ""))} · ${cat ? t(TYPE_LABEL[cat.type]) : ""}${e.branches ? " · " + t("فروع تقريبية: {n}", { n: e.branches }) : ""}${e.hidden ? " · " + t("مخفي") : ""}</small>
+        <small>${esc(tv(cat?.name || ""))}${e.branches ? " · " + t("فروع تقريبية: {n}", { n: e.branches }) : ""}${e.hidden ? " · " + t("مخفي") : ""}</small>
       </div>
       <button type="button" class="icon-btn" data-action="close-modal" title="${t("إغلاق")}" aria-label="${t("إغلاق")}">✕</button>
     </div>
@@ -664,20 +658,14 @@ const modalActions = (label) => `
   </div>`;
 
 function categoryModal(cat) {
-  const c = cat || { name: "", type: state.catType };
+  const c = cat || { name: "" };
   openModal(`
     <h3>${cat ? t("تعديل تصنيف") : t("تصنيف جديد")}</h3>
     <div class="field"><label>${t("اسم التصنيف")}</label><input class="input" name="name" value="${esc(c.name)}" required></div>
-    <div class="field"><label>${t("النوع")}</label>
-      <select class="input" name="type">
-        ${Object.entries(TYPE_LABEL).map(([k, v]) => `<option value="${k}" ${c.type === k ? "selected" : ""}>${t(v)}</option>`).join("")}
-      </select>
-    </div>
     ${modalActions()}`, (f) => {
-    const data = { name: f.name.value.trim(), type: f.type.value };
+    const data = { name: f.name.value.trim(), type: "brand" };
     if (cat) Object.assign(cat, data);
     else { const n = { id: uid(), ...data }; D().categories.push(n); state.catId = n.id; }
-    state.catType = data.type;
     commit(t("تم حفظ التصنيف"));
   });
 }
@@ -700,10 +688,7 @@ function contactRow(c = {}) {
 function entityModal(ent) {
   if (!D().categories.length) return toast(t("أضف تصنيفاً أولاً"));
   const e = ent || { name: "", logo: "", notes: "", contacts: [{}], categoryId: catById(state.catId) ? state.catId : D().categories[0].id };
-  const catOpts = Object.entries(TYPE_LABEL).map(([k, v]) => `
-    <optgroup label="${t(v)}">
-      ${D().categories.filter((c) => c.type === k).map((c) => `<option value="${c.id}" ${c.id === e.categoryId ? "selected" : ""}>${esc(tv(c.name))}</option>`).join("")}
-    </optgroup>`).join("");
+  const catOpts = D().categories.map((c) => `<option value="${c.id}" ${c.id === e.categoryId ? "selected" : ""}>${esc(tv(c.name))}</option>`).join("");
 
   openModal(`
     <h3>${ent ? t("تعديل شركة / براند") : t("إضافة شركة / براند")}</h3>
@@ -763,7 +748,7 @@ function entityModal(ent) {
     if (ent) Object.assign(ent, data);
     else D().entities.push({ id: uid(), ...data });
     const cat = catById(data.categoryId);
-    state.catType = cat.type; state.catId = cat.id;
+    state.catId = cat.id;
     commit(t("تم الحفظ"));
   });
 
@@ -906,7 +891,6 @@ function bulkTasks(op, value) {
 
 // ---------- actions ----------
 const actions = {
-  "cat-type": (el) => { state.catType = el.dataset.type; state.catId = null; state.search = ""; state.tier = ""; state.limit = PAGE_SIZE; render(); },
   "pick-cat": (el) => { state.catId = el.dataset.id; state.search = ""; state.limit = PAGE_SIZE; render(); },
   "filter-tier": (el) => { state.tier = el.dataset.v; state.limit = PAGE_SIZE; render(); },
   "show-more": () => { state.limit += PAGE_SIZE; render(); },
