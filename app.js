@@ -7,7 +7,10 @@ const D = () => Store.data;
 const TIERS = ["A", "B", "C", "D"];
 const ALL_CATS = "_all";
 const PAGE_SIZE = 60;
-const CONTACT_STATUS = { unverified: "غير مؤكد", official: "مؤكد من مصدر رسمي", called: "تم الاتصال به" };
+const CONTACT_STATUS = { unverified: "غير مؤكد", official: "مؤكد من مصدر رسمي", called: "تم الاتصال به", invalid: "إيميل غير صالح" };
+const SITE_CHECK = { read: "تم فحص الموقع الرسمي", blocked: "الموقع يمنع الفحص الآلي", dead: "الموقع لا يعمل", none: "لا يوجد موقع للفحص" };
+const STATUS_CLASS = { official: "ok", called: "ok", unverified: "warn", invalid: "bad" };
+const hasOfficial = (e) => e.contacts.some((c) => c.status === "official" || c.status === "called");
 const tierBadge = (e) => (TIERS.includes(e.tier) ? `<span class="tier tier-${e.tier.toLowerCase()}">${e.tier}</span>` : "");
 const tierRank = (e) => (TIERS.includes(e.tier) ? TIERS.indexOf(e.tier) : TIERS.length);
 const state = {
@@ -15,6 +18,7 @@ const state = {
   catId: null,
   search: "",
   tier: "", // فلتر قوة البراند
+  verified: "", // فلتر التأكيد: yes | no
   limit: PAGE_SIZE, // عدد البطاقات المعروضة
   taskStatus: "open", // all | open | done
   taskEmp: "",
@@ -180,7 +184,8 @@ function renderDirectory() {
   const cats = allCats.filter(isVisible);
   if (!cats.find((c) => c.id === state.catId)) state.catId = ALL_CATS;
   const q = state.search.trim().toLowerCase();
-  const tierOk = (e) => !state.tier || (state.tier === "none" ? !TIERS.includes(e.tier) : e.tier === state.tier);
+  const verOk = (e) => !state.verified || hasOfficial(e) === (state.verified === "yes");
+  const tierOk = (e) => verOk(e) && (!state.tier || (state.tier === "none" ? !TIERS.includes(e.tier) : e.tier === state.tier));
 
   const ents = (q
     ? D().entities.filter((e) =>
@@ -227,6 +232,10 @@ function renderDirectory() {
       ${TIERS.map((x) => `<button class="tier-chip tier-${x.toLowerCase()} ${state.tier === x ? "active" : ""}" data-action="filter-tier" data-v="${x}">${x} <small>${D().entities.filter((e) => e.tier === x && entVisible(e)).length}</small></button>`).join("")}
       <button class="${state.tier === "none" ? "active" : ""}" data-action="filter-tier" data-v="none">${t("بدون تصنيف")} <small>${D().entities.filter((e) => !TIERS.includes(e.tier) && entVisible(e)).length}</small></button>
     </div>
+    <div class="tier-filter" role="group" aria-label="${t("التأكيد")}">
+      <span class="task-meta">${t("التأكيد")}</span>
+      ${[["", "الكل"], ["yes", "فيه تواصل مؤكد"], ["no", "غير مؤكد"]].map(([k, v]) => `<button class="${state.verified === k ? "active" : ""}" data-action="filter-verified" data-v="${k}">${t(v)}</button>`).join("")}
+    </div>
     <div class="layout">
       <aside class="sidebar">${sidebar}</aside>
       <section class="grid">${cards}</section>
@@ -252,6 +261,7 @@ function entityCard(e) {
         ${logoHtml(e)}
         <div class="ent-title">
           <strong>${tierBadge(e)} ${esc(e.name)}</strong>
+          ${hasOfficial(e) ? `<span class="badge ok">${t("فيه تواصل مؤكد")}</span>` : ""}
           <small>${esc(tv(cat?.name || ""))}</small>
         </div>
         ${open ? `<span class="badge warn">${t("{n} مهام", { n: open })}</span>` : ""}
@@ -281,7 +291,8 @@ function entityDetails(e) {
     ? `<div class="detail-contacts">${e.contacts.map((c) => `
         <div class="detail-contact">
           <b>${esc(tv(c.name) || "—")}</b>
-          ${CONTACT_STATUS[c.status] ? `<span class="badge ${c.status === "unverified" ? "warn" : "ok"}">${t(CONTACT_STATUS[c.status])}</span>` : ""}
+          ${CONTACT_STATUS[c.status] ? `<span class="badge ${STATUS_CLASS[c.status]}">${t(CONTACT_STATUS[c.status])}</span>` : ""}
+          ${c.evidence ? `<a class="task-meta" href="${esc(safeUrl(c.evidence))}" target="_blank" rel="noopener">${t("الدليل")}</a>` : ""}
           ${c.phone ? `<div class="detail-line"><span dir="ltr">${esc(c.phone)}</span>
             <span class="detail-actions">
               <a class="btn sm" href="tel:${esc(c.phone)}">${t("اتصال")}</a>
@@ -297,7 +308,7 @@ function entityDetails(e) {
     : `<p class="task-meta">${t("لا توجد بيانات تواصل")}</p>`;
 
   const links = (e.links || []).length
-    ? `<div class="links">${e.links.map((l) => `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">🔗 ${esc(tv(l.title) || l.url)}</a>`).join("")}</div>`
+    ? `<div class="links">${e.links.map((l) => `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">🔗 ${esc(tv(l.title) || l.url)}${l.status === "dead" ? ` (${t("الموقع لا يعمل")})` : ""}</a>`).join("")}</div>`
     : `<p class="task-meta">${t("لا توجد روابط")}</p>`;
 
   const files = (e.files || []).length
@@ -322,7 +333,7 @@ function entityDetails(e) {
       </div>
       <button type="button" class="icon-btn" data-action="close-modal" title="${t("إغلاق")}" aria-label="${t("إغلاق")}">✕</button>
     </div>
-    ${section(t("بيانات التواصل"), contacts)}
+    ${section(t("بيانات التواصل"), (e.check ? `<p class="task-meta">${t(SITE_CHECK[e.check.site])} · ${esc(e.check.at)}</p>` : "") + contacts)}
     ${e.notes ? section(t("ملاحظات"), `<p class="notes">${esc(tv(e.notes))}</p>`) : ""}
     ${section(t("روابط مرجعية"), links)}
     ${section(t("ملفات وصور"), files)}
@@ -681,6 +692,7 @@ function contactRow(c = {}) {
         ${Object.entries(CONTACT_STATUS).map(([k, v]) => `<option value="${k}" ${c.status === k ? "selected" : ""}>${t(v)}</option>`).join("")}
       </select>
       <input type="hidden" data-k="source" value="${esc(c.source)}">
+      <input type="hidden" data-k="evidence" value="${esc(c.evidence)}">
       <button type="button" class="icon-btn danger" data-action="rm-contact" title="${t("حذف")}">✕</button>
     </div>`;
 }
@@ -893,6 +905,7 @@ function bulkTasks(op, value) {
 const actions = {
   "pick-cat": (el) => { state.catId = el.dataset.id; state.search = ""; state.limit = PAGE_SIZE; render(); },
   "filter-tier": (el) => { state.tier = el.dataset.v; state.limit = PAGE_SIZE; render(); },
+  "filter-verified": (el) => { state.verified = el.dataset.v; state.limit = PAGE_SIZE; render(); },
   "show-more": () => { state.limit += PAGE_SIZE; render(); },
   "close-modal": () => closeModal(),
   "open-ent": (el) => entityDetails(entById(el.dataset.id)),

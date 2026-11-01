@@ -383,3 +383,4 @@ body.read-only [data-action="toggle-done"], body.read-only [data-action="toggle-
 .tier-filter .tier-chip.active { outline: 3px solid var(--primary); outline-offset: 1px; }
 .tier-filter small { font-weight: 400; opacity: .85; }
 .more-btn { grid-column: 1 / -1; justify-self: center; }
+.badge.bad { background: #b91c1c; color: #fff; }

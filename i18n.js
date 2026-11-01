@@ -3,6 +3,16 @@
 let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
+  "إيميل غير صالح": "Invalid email",
+  "تم فحص الموقع الرسمي": "Official site checked",
+  "الموقع يمنع الفحص الآلي": "Site blocks automated checks",
+  "الموقع لا يعمل": "Site not working",
+  "لا يوجد موقع للفحص": "No site to check",
+  "التأكيد": "Verification",
+  "فيه تواصل مؤكد": "Has confirmed contact",
+  "الدليل": "Evidence",
+  "رقم رسمي": "Official number",
+  "إيميل رسمي": "Official email",
   "كل البراندات": "All brands",
   "قوة البراند": "Brand strength",
   "بدون تصنيف": "Not rated",
