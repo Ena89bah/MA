@@ -379,7 +379,7 @@ body.read-only [data-action="toggle-done"], body.read-only [data-action="toggle-
 .tier-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
 .tier-filter button { border: 1px solid var(--line); background: var(--card); color: inherit; border-radius: 8px; padding: 4px 12px; cursor: pointer; font-weight: 600; min-height: 34px; }
 .tier-filter button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-.tier-filter .tier-chip { color: var(--tier); border-color: var(--tier); }
-.tier-filter .tier-chip.active { background: var(--tier); border-color: var(--tier); color: #fff; }
+.tier-filter .tier-chip, .tier-filter .tier-chip.active { background: var(--tier); border-color: var(--tier); color: #fff; }
+.tier-filter .tier-chip.active { outline: 3px solid var(--primary); outline-offset: 1px; }
 .tier-filter small { font-weight: 400; opacity: .85; }
 .more-btn { grid-column: 1 / -1; justify-self: center; }
