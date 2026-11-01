@@ -3,6 +3,22 @@
 let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
+  "كل البراندات": "All brands",
+  "قوة البراند": "Brand strength",
+  "بدون تصنيف": "Not rated",
+  "حالة التحقق": "Verification",
+  "غير مؤكد": "Unverified",
+  "مؤكد من مصدر رسمي": "Confirmed by official source",
+  "تم الاتصال به": "Called",
+  "عرض المزيد ({n})": "Show more ({n})",
+  "+{n} أخرى": "+{n} more",
+  "فروع تقريبية: {n}": "Approx. branches: {n}",
+  "رقم موحد": "Hotline",
+  "رقم فرع": "Branch number",
+  "إيميل عام": "General email",
+  "كافيهات وقهوة": "Cafés & Coffee",
+  "حلويات ومخابز": "Sweets & Bakeries",
+  "متاجر أخرى": "Other stores",
   // ----- الواجهة العامة -----
   "دليل الشركات والمهام": "Companies & Tasks Directory",
   "التصنيفات والشركات": "Categories & Companies",

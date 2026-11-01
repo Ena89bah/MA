@@ -119,6 +119,14 @@ const Store = {
     if (this.mode !== "supabase") return;
     const d = await this.rpc("app_get_state", { p_token: this.token });
     this.data = d && Object.keys(d).length ? normalize(d) : await loadSeed();
+    this.snapshot();
+  },
+
+  // صورة لآخر ما حُفظ، لنرسل عند الحفظ ما تغيّر فقط
+  snapshot() {
+    const { entities, ...rest } = this.data;
+    this.savedRest = JSON.stringify(rest);
+    this.savedEnts = new Map(entities.map((e) => [e.id, JSON.stringify(e)]));
   },
 
   // ---------- الدخول والمستخدمين ----------
@@ -167,7 +175,26 @@ const Store = {
     if (this.mode !== "supabase") {
       try { localStorage.setItem(DB_KEY, JSON.stringify(this.data)); } catch {}
     } else {
-      await this.rpc("app_save_state", { p_token: this.token, p_data: this.data });
+      const { entities, ...rest } = this.data;
+      const upsert = entities.filter((e) => this.savedEnts.get(e.id) !== JSON.stringify(e));
+      const ids = new Set(entities.map((e) => e.id));
+      const del = [...this.savedEnts.keys()].filter((id) => !ids.has(id));
+      if (this.perEntity !== false && (upsert.length || del.length)) {
+        try {
+          await this.rpc("app_save_entities", { p_token: this.token, p_upsert: upsert, p_delete: del });
+          this.perEntity = true;
+        } catch (err) {
+          // قبل تشغيل supabase-entities.sql لا توجد الدالة، فنحفظ المستند كاملاً كما كان
+          if (!/app_save_entities|schema cache/.test(err.message)) throw err;
+          this.perEntity = false;
+        }
+      }
+      if (this.perEntity === false) {
+        await this.rpc("app_save_state", { p_token: this.token, p_data: this.data });
+      } else if (JSON.stringify(rest) !== this.savedRest) {
+        await this.rpc("app_save_state", { p_token: this.token, p_data: rest });
+      }
+      this.snapshot();
     }
   },
 

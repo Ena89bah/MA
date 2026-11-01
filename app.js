@@ -5,11 +5,19 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const D = () => Store.data;
 
 const TYPE_LABEL = { activity: "الأنشطة", brand: "البراندات" };
+const TIERS = ["A", "B", "C", "D"];
+const ALL_CATS = "_all";
+const PAGE_SIZE = 60;
+const CONTACT_STATUS = { unverified: "غير مؤكد", official: "مؤكد من مصدر رسمي", called: "تم الاتصال به" };
+const tierBadge = (e) => (TIERS.includes(e.tier) ? `<span class="tier tier-${e.tier.toLowerCase()}">${e.tier}</span>` : "");
+const tierRank = (e) => (TIERS.includes(e.tier) ? TIERS.indexOf(e.tier) : TIERS.length);
 const state = {
   view: "directory",
   catType: "activity",
   catId: null,
   search: "",
+  tier: "", // فلتر قوة البراند
+  limit: PAGE_SIZE, // عدد البطاقات المعروضة
   taskStatus: "open", // all | open | done
   taskEmp: "",
   taskType: "",
@@ -172,28 +180,39 @@ function renderDirectory() {
   if (!hiddenCount) state.showHidden = false;
   const allCats = D().categories.filter((c) => c.type === state.catType);
   const cats = allCats.filter(isVisible);
-  if (!cats.find((c) => c.id === state.catId)) state.catId = cats[0]?.id || null;
+  const isBrand = state.catType === "brand";
+  if (!cats.find((c) => c.id === state.catId) && !(isBrand && state.catId === ALL_CATS)) state.catId = isBrand ? ALL_CATS : cats[0]?.id || null;
   const q = state.search.trim().toLowerCase();
+  const typeCats = new Set(allCats.map((c) => c.id));
+  const tierOk = (e) => !isBrand || !state.tier || e.tier === state.tier;
 
   const ents = (q
     ? D().entities.filter((e) =>
         [e.name, e.notes, ...e.contacts.flatMap((c) => [c.name, c.phone, c.email])].some((v) => String(v || "").toLowerCase().includes(q)))
-    : D().entities.filter((e) => e.categoryId === state.catId)
-  ).filter(entVisible);
+    : D().entities.filter((e) => (state.catId === ALL_CATS ? typeCats.has(e.categoryId) : e.categoryId === state.catId))
+  ).filter(entVisible).filter(tierOk);
+  if (isBrand) ents.sort((a, b) => tierRank(a) - tierRank(b) || (b.branches || 0) - (a.branches || 0));
+  const shown = ents.slice(0, state.limit);
 
+  const allItem = isBrand ? `
+        <div class="cat-item ${state.catId === ALL_CATS && !q ? "active" : ""}" data-action="pick-cat" data-id="${ALL_CATS}">
+          <span class="name">${t("كل البراندات")}</span>
+          <span class="count">${D().entities.filter((e) => typeCats.has(e.categoryId) && entVisible(e) && tierOk(e)).length}</span>
+        </div>` : "";
   const sidebar = cats.length
-    ? cats.map((c) => `
+    ? allItem + cats.map((c) => `
         <div class="cat-item ${c.id === state.catId && !q ? "active" : ""} ${c.hidden ? "is-hidden" : ""}" data-action="pick-cat" data-id="${c.id}">
           <span class="name">${esc(tv(c.name))}${c.hidden ? ` <small class="hidden-tag">(${t("مخفي")})</small>` : ""}</span>
-          <span class="count">${D().entities.filter((e) => e.categoryId === c.id && isVisible(e)).length}</span>
+          <span class="count">${D().entities.filter((e) => e.categoryId === c.id && isVisible(e) && tierOk(e)).length}</span>
           <button class="text-btn" data-action="toggle-hide-cat" data-id="${c.id}">${c.hidden ? t("إظهار") : t("إخفاء")}</button>
           <button class="icon-btn" data-action="edit-cat" data-id="${c.id}" title="${t("تعديل")}">✎</button>
           <button class="icon-btn danger" data-action="del-cat" data-id="${c.id}" title="${t("حذف")}">🗑</button>
         </div>`).join("")
     : `<p class="empty">${allCats.length ? t("كل التصنيفات مخفية") : t("لا توجد تصنيفات")}</p>`;
 
+  const more = ents.length - shown.length;
   const cards = ents.length
-    ? ents.map(entityCard).join("")
+    ? shown.map(entityCard).join("") + (more ? `<button class="btn more-btn" data-action="show-more">${t("عرض المزيد ({n})", { n: more })}</button>` : "")
     : `<p class="empty">${q ? t("لا توجد نتائج") : state.catId ? t("لا توجد شركات في هذا التصنيف") : t("أضف تصنيفاً أولاً")}</p>`;
   const hiddenBtn = hiddenCount
     ? `<button class="btn ${state.showHidden ? "active-toggle" : ""}" data-action="toggle-show-hidden">${state.showHidden ? t("إخفاء المخفي") : t("إظهار المخفي ({n})", { n: hiddenCount })}</button>`
@@ -209,6 +228,11 @@ function renderDirectory() {
       <button class="btn" data-action="new-cat">${t("+ تصنيف")}</button>
       <button class="btn primary" data-action="new-ent">${state.catType === "brand" ? t("+ براند") : t("+ شركة")}</button>
     </div>
+    ${isBrand ? `<div class="tier-filter" role="group" aria-label="${t("قوة البراند")}">
+      <span class="task-meta">${t("قوة البراند")}</span>
+      <button class="${state.tier ? "" : "active"}" data-action="filter-tier" data-v="">${t("الكل")}</button>
+      ${TIERS.map((x) => `<button class="tier-chip tier-${x.toLowerCase()} ${state.tier === x ? "active" : ""}" data-action="filter-tier" data-v="${x}">${x} <small>${D().entities.filter((e) => e.tier === x && typeCats.has(e.categoryId) && entVisible(e)).length}</small></button>`).join("")}
+    </div>` : ""}
     <div class="layout">
       <aside class="sidebar">${sidebar}</aside>
       <section class="grid">${cards}</section>
@@ -218,13 +242,14 @@ function renderDirectory() {
 function entityCard(e) {
   const cat = catById(e.categoryId);
   const open = openTasksFor((x) => x.entityId === e.id);
+  const extra = e.contacts.length - 3;
   const contacts = e.contacts.length
-    ? `<ul class="contacts">${e.contacts.map((c) => `
+    ? `<ul class="contacts">${e.contacts.slice(0, 3).map((c) => `
         <li>
           <b>${esc(tv(c.name) || "—")}</b>
           ${c.phone ? `<span>📞 <a href="tel:${esc(c.phone)}">${esc(c.phone)}</a></span>` : ""}
           ${c.email ? `<span>✉️ <a href="mailto:${esc(c.email)}">${esc(c.email)}</a></span>` : ""}
-        </li>`).join("")}</ul>`
+        </li>`).join("")}${extra > 0 ? `<li class="task-meta">${t("+{n} أخرى", { n: extra })}</li>` : ""}</ul>`
     : `<p class="task-meta" style="margin:0 0 10px">${t("لا توجد بيانات تواصل")}</p>`;
   return `
     <article class="card clickable ${e.hidden ? "is-hidden" : ""}" data-action="open-ent" data-id="${e.id}" tabindex="0" role="button" aria-label="${esc(e.name)}">
@@ -232,14 +257,14 @@ function entityCard(e) {
       <div class="ent-head">
         ${logoHtml(e)}
         <div class="ent-title">
-          <strong>${esc(e.name)}</strong>
+          <strong>${tierBadge(e)} ${esc(e.name)}</strong>
           <small>${esc(tv(cat?.name || ""))}</small>
         </div>
         ${open ? `<span class="badge warn">${t("{n} مهام", { n: open })}</span>` : ""}
       </div>
       ${contacts}
       ${e.notes ? `<p class="notes">📝 ${esc(tv(e.notes))}</p>` : ""}
-      ${(e.links || []).length ? `<div class="links">${e.links.map((l) =>
+      ${(e.links || []).length ? `<div class="links">${e.links.slice(0, 3).map((l) =>
         `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">🔗 ${esc(tv(l.title) || l.url)}</a>`).join("")}</div>` : ""}
       ${(e.files || []).length ? `<div class="files">${e.files.map((f, i) => fileChip(f, `data-action="open-file" data-ent="${e.id}" data-i="${i}"`)).join("")}</div>` : ""}
       <div class="card-actions">
@@ -262,6 +287,7 @@ function entityDetails(e) {
     ? `<div class="detail-contacts">${e.contacts.map((c) => `
         <div class="detail-contact">
           <b>${esc(tv(c.name) || "—")}</b>
+          ${CONTACT_STATUS[c.status] ? `<span class="badge ${c.status === "unverified" ? "warn" : "ok"}">${t(CONTACT_STATUS[c.status])}</span>` : ""}
           ${c.phone ? `<div class="detail-line"><span dir="ltr">${esc(c.phone)}</span>
             <span class="detail-actions">
               <a class="btn sm" href="tel:${esc(c.phone)}">${t("اتصال")}</a>
@@ -297,8 +323,8 @@ function entityDetails(e) {
     <div class="detail-head">
       ${logoHtml(e, "logo detail-logo")}
       <div class="ent-title">
-        <h3>${esc(e.name)}</h3>
-        <small>${esc(tv(cat?.name || ""))} · ${cat ? t(TYPE_LABEL[cat.type]) : ""}${e.hidden ? " · " + t("مخفي") : ""}</small>
+        <h3>${tierBadge(e)} ${esc(e.name)}</h3>
+        <small>${esc(tv(cat?.name || ""))} · ${cat ? t(TYPE_LABEL[cat.type]) : ""}${e.branches ? " · " + t("فروع تقريبية: {n}", { n: e.branches }) : ""}${e.hidden ? " · " + t("مخفي") : ""}</small>
       </div>
       <button type="button" class="icon-btn" data-action="close-modal" title="${t("إغلاق")}" aria-label="${t("إغلاق")}">✕</button>
     </div>
@@ -662,13 +688,18 @@ function contactRow(c = {}) {
       <input class="input" data-k="name" placeholder="${t("الاسم")}" value="${esc(c.name)}">
       <input class="input" data-k="phone" placeholder="${t("الرقم")}" value="${esc(c.phone)}" type="tel" inputmode="tel" autocomplete="off" dir="ltr">
       <input class="input" data-k="email" placeholder="${t("الإيميل")}" value="${esc(c.email)}" type="email" inputmode="email" autocomplete="off" autocapitalize="off" dir="ltr">
+      <select class="input" data-k="status" aria-label="${t("حالة التحقق")}">
+        <option value="">${t("حالة التحقق")}</option>
+        ${Object.entries(CONTACT_STATUS).map(([k, v]) => `<option value="${k}" ${c.status === k ? "selected" : ""}>${t(v)}</option>`).join("")}
+      </select>
+      <input type="hidden" data-k="source" value="${esc(c.source)}">
       <button type="button" class="icon-btn danger" data-action="rm-contact" title="${t("حذف")}">✕</button>
     </div>`;
 }
 
 function entityModal(ent) {
   if (!D().categories.length) return toast(t("أضف تصنيفاً أولاً"));
-  const e = ent || { name: "", logo: "", notes: "", contacts: [{}], categoryId: state.catId || D().categories[0].id };
+  const e = ent || { name: "", logo: "", notes: "", contacts: [{}], categoryId: catById(state.catId) ? state.catId : D().categories[0].id };
   const catOpts = Object.entries(TYPE_LABEL).map(([k, v]) => `
     <optgroup label="${t(v)}">
       ${D().categories.filter((c) => c.type === k).map((c) => `<option value="${c.id}" ${c.id === e.categoryId ? "selected" : ""}>${esc(tv(c.name))}</option>`).join("")}
@@ -678,6 +709,12 @@ function entityModal(ent) {
     <h3>${ent ? t("تعديل شركة / براند") : t("إضافة شركة / براند")}</h3>
     <div class="field"><label>${t("الاسم")}</label><input class="input" name="name" value="${esc(e.name)}" required></div>
     <div class="field"><label>${t("التصنيف")}</label><select class="input" name="categoryId">${catOpts}</select></div>
+    <div class="field"><label>${t("قوة البراند")}</label>
+      <select class="input" name="tier">
+        <option value="">${t("بدون تصنيف")}</option>
+        ${TIERS.map((x) => `<option value="${x}" ${e.tier === x ? "selected" : ""}>${x}</option>`).join("")}
+      </select>
+    </div>
     <div class="field">
       <label>${t("الشعار (رابط صورة أو رفع ملف)")}</label>
       <div class="row">
@@ -711,11 +748,12 @@ function entityModal(ent) {
       .map((r) => ({ title: r.querySelector("[data-k=title]").value.trim(), url: r.querySelector("[data-k=url]").value.trim() }))
       .filter((l) => l.url);
     const contacts = $$(".contact-row", f)
-      .map((r) => Object.fromEntries($$("input", r).map((i) => [i.dataset.k, i.value.trim()])))
+      .map((r) => Object.fromEntries($$("[data-k]", r).map((i) => [i.dataset.k, i.value.trim()])))
       .filter((c) => c.name || c.phone || c.email);
     const data = {
       name: f.name.value.trim(),
       categoryId: f.categoryId.value,
+      tier: f.tier.value,
       logo: f.logoData.value || f.logo.value.trim(),
       notes: f.notes.value.trim(),
       contacts,
@@ -868,8 +906,10 @@ function bulkTasks(op, value) {
 
 // ---------- actions ----------
 const actions = {
-  "cat-type": (el) => { state.catType = el.dataset.type; state.catId = null; state.search = ""; render(); },
-  "pick-cat": (el) => { state.catId = el.dataset.id; state.search = ""; render(); },
+  "cat-type": (el) => { state.catType = el.dataset.type; state.catId = null; state.search = ""; state.tier = ""; state.limit = PAGE_SIZE; render(); },
+  "pick-cat": (el) => { state.catId = el.dataset.id; state.search = ""; state.limit = PAGE_SIZE; render(); },
+  "filter-tier": (el) => { state.tier = el.dataset.v; state.limit = PAGE_SIZE; render(); },
+  "show-more": () => { state.limit += PAGE_SIZE; render(); },
   "close-modal": () => closeModal(),
   "open-ent": (el) => entityDetails(entById(el.dataset.id)),
   copy: async (el) => {
@@ -1081,6 +1121,7 @@ document.addEventListener("input", (ev) => {
   if (ev.target.id === "search") {
     // نحدّث النتائج فقط دون إعادة رسم حقل البحث، حتى لا تُغلق لوحة المفاتيح على الجوال
     state.search = ev.target.value;
+    state.limit = PAGE_SIZE;
     const tmp = document.createElement("div");
     tmp.innerHTML = renderDirectory();
     $(".layout").replaceWith(tmp.querySelector(".layout"));

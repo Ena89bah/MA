@@ -170,7 +170,7 @@ dialog h3 { margin: 0; }
 .field label { font-size: 13px; color: var(--muted); }
 .row { display: flex; gap: 8px; align-items: center; }
 .row > * { flex: 1; }
-.contact-row { display: grid; grid-template-columns: 1fr 1fr 1.3fr auto; gap: 6px; }
+.contact-row { display: grid; grid-template-columns: 1fr 1fr 1.3fr 1fr auto; gap: 6px; }
 @media (max-width: 520px) { .contact-row { grid-template-columns: 1fr 1fr; } }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 .logo-preview { width: 64px; height: 64px; }
@@ -368,3 +368,18 @@ body.read-only [data-action^="toggle-hide"], body.read-only [data-action="bulk"]
 body.read-only .select-all, body.read-only .task .sel, body.read-only [data-action="save-types"],
 body.read-only #importFile, body.read-only label:has(#importFile) { display: none !important; }
 body.read-only [data-action="toggle-done"], body.read-only [data-action="toggle-task"], body.read-only [data-action="assign-task"] { pointer-events: none; }
+
+/* قوة البراند */
+.tier { display: inline-block; min-width: 20px; text-align: center; font-size: 12px; font-weight: 700; line-height: 20px; border-radius: 6px; color: #fff; }
+.tier-a { --tier: #15803d; }
+.tier-b { --tier: #1d4ed8; }
+.tier-c { --tier: #c2570c; }
+.tier-d { --tier: #64748b; }
+.tier.tier-a, .tier.tier-b, .tier.tier-c, .tier.tier-d { background: var(--tier); }
+.tier-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
+.tier-filter button { border: 1px solid var(--line); background: var(--card); color: inherit; border-radius: 8px; padding: 4px 12px; cursor: pointer; font-weight: 600; min-height: 34px; }
+.tier-filter button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.tier-filter .tier-chip { color: var(--tier); border-color: var(--tier); }
+.tier-filter .tier-chip.active { background: var(--tier); border-color: var(--tier); color: #fff; }
+.tier-filter small { font-weight: 400; opacity: .85; }
+.more-btn { grid-column: 1 / -1; justify-self: center; }
