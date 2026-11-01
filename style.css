@@ -384,3 +384,5 @@ body.read-only [data-action="toggle-done"], body.read-only [data-action="toggle-
 .tier-filter small { font-weight: 400; opacity: .85; }
 .more-btn { grid-column: 1 / -1; justify-self: center; }
 .badge.bad { background: #b91c1c; color: #fff; }
+/* خلفية محايدة حتى تظهر الشعارات البيضاء والسوداء في الوضعين */
+img.logo { background: #dfe3e8; }
