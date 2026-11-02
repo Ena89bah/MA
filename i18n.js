@@ -3,6 +3,10 @@
 let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
+  "اسم التواصل": "Contact name",
+  "رقم التواصل": "Contact number",
+  "عدد الفروع": "Branches",
+  "الوسيط": "Broker",
   "أنشأه": "Created by",
   "قبله": "Accepted by",
   "رفضه": "Rejected by",

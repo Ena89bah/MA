@@ -465,12 +465,14 @@ function statusOptions(selected) {
     list.map((x) => `<option value="${esc(x)}" ${x === selected ? "selected" : ""}>${esc(tv(x))}</option>`).join("");
 }
 
-const formatDateTime = (ms) => new Intl.DateTimeFormat(LANG === "ar" ? "ar-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(ms);
+// dates imported from a sheet carry no time, so only the day is shown for them
+const formatDateTime = (ms, dateOnly) => new Intl.DateTimeFormat(LANG === "ar" ? "ar-u-ca-gregory-nu-latn" : "en-GB", dateOnly ? { dateStyle: "medium", timeZone: "UTC" } : { dateStyle: "medium", timeStyle: "short" }).format(ms);
 
 function setRentalDecision(x, decision) {
   x.decision = decision;
   x.decisionBy = Store.user?.name || "";
   x.decisionAt = Date.now();
+  x.decisionDateOnly = false;
 }
 
 function rentalCreatedLine(x) {
@@ -480,7 +482,7 @@ function rentalCreatedLine(x) {
 function rentalDecisionLine(x) {
   if (!x.decisionAt) return "";
   const label = x.decision === "accepted" ? t("قبله") : t("رفضه");
-  return `<p class="task-meta rental-decision">${label}: <b>${esc(tv(x.decisionBy) || "—")}</b> · <span dir="ltr">${esc(formatDateTime(x.decisionAt))}</span></p>`;
+  return `<p class="task-meta rental-decision">${label}: <b>${esc(tv(x.decisionBy) || "—")}</b> · <span dir="ltr">${esc(formatDateTime(x.decisionAt, x.decisionDateOnly))}</span></p>`;
 }
 
 function rentalRows() {
@@ -488,7 +490,7 @@ function rentalRows() {
   const list = (D().rentals || [])
     .filter((x) => rentalList(x) === state.rentalList)
     .filter((x) => !state.rentalStatus || x.status === state.rentalStatus)
-    .filter((x) => !q || [x.brandName, x.area, x.reviews].some((v) => String(v || "").toLowerCase().includes(q)))
+    .filter((x) => !q || [x.brandName, x.area, x.reviews, x.contactName, x.contactPhone, x.broker, x.notes].some((v) => String(v || "").toLowerCase().includes(q)))
     .sort((a, b) => b.createdAt - a.createdAt);
   if (!list.length) return `<p class="empty">${t("لا توجد طلبات")}</p>`;
   return list.map((x) => {
@@ -504,6 +506,9 @@ function rentalRows() {
           </div>
           ${x.decision === "accepted" ? `<span class="badge ok">${t("مقبول")}</span>` : x.decision === "rejected" ? `<span class="badge bad">${t("مرفوض")}</span>` : ""}
         </div>
+        ${x.contactName || x.contactPhone ? `<div class="detail-line"><span>👤 ${esc(x.contactName || "—")}</span>${x.contactPhone ? `<a href="tel:${esc(x.contactPhone)}" dir="ltr">${esc(x.contactPhone)}</a>` : ""}</div>` : ""}
+        ${x.branches || x.broker ? `<p class="task-meta rental-decision">${x.branches ? `${t("عدد الفروع")}: ${esc(x.branches)}` : ""}${x.branches && x.broker ? " · " : ""}${x.broker ? `${t("الوسيط")}: ${esc(x.broker)}` : ""}</p>` : ""}
+        ${x.notes ? `<p class="notes">📝 ${esc(x.notes)}</p>` : ""}
         ${rentalCreatedLine(x)}
         ${rentalDecisionLine(x)}
         ${(x.links || []).length ? `<div class="links">${x.links.map((l) => `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">🔗 ${esc(tv(l.title) || l.url)}</a>`).join("")}</div>` : ""}
@@ -555,13 +560,22 @@ function rentalModal(item) {
       <datalist id="brandNames">${D().entities.map((e) => `<option value="${esc(e.name)}"></option>`).join("")}</datalist>
     </div>
     <div class="field"><label>${t("المساحة")}</label><input class="input" name="area" value="${esc(x.area)}" placeholder="${t("مثال: 250 م²")}"></div>
+    <div class="row">
+      <div class="field" style="flex:1"><label>${t("اسم التواصل")}</label><input class="input" name="contactName" value="${esc(x.contactName)}"></div>
+      <div class="field" style="flex:1"><label>${t("رقم التواصل")}</label><input class="input" name="contactPhone" value="${esc(x.contactPhone)}" type="tel" inputmode="tel" dir="ltr"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:1"><label>${t("عدد الفروع")}</label><input class="input" name="branches" value="${esc(x.branches)}"></div>
+      <div class="field" style="flex:1"><label>${t("الوسيط")}</label><input class="input" name="broker" value="${esc(x.broker)}"></div>
+    </div>
     <div class="field"><label>${t("الحالة")}</label><select class="input" name="status">${statusOptions(x.status)}</select></div>
     <div class="field">
       <label>${t("روابط")}</label>
       <div id="links" style="display:grid;gap:6px">${(x.links || []).map(linkRow).join("")}</div>
       <div><button type="button" class="btn sm" data-action="add-link">${t("+ رابط")}</button></div>
     </div>
-    <div class="field"><label>${t("التقييمات")}</label><textarea class="input" name="reviews" rows="5">${esc(x.reviews)}</textarea></div>
+    <div class="field"><label>${t("التقييمات")}</label><textarea class="input" name="reviews" rows="4">${esc(x.reviews)}</textarea></div>
+    <div class="field"><label>${t("ملاحظات")}</label><textarea class="input" name="notes" rows="3">${esc(x.notes)}</textarea></div>
     ${modalActions()}`, (f) => {
     const brandName = f.brandName.value.trim();
     const data = {
@@ -571,6 +585,11 @@ function rentalModal(item) {
       area: f.area.value.trim(),
       status: f.status.value,
       reviews: f.reviews.value.trim(),
+      notes: f.notes.value.trim(),
+      contactName: f.contactName.value.trim(),
+      contactPhone: f.contactPhone.value.trim(),
+      branches: f.branches.value.trim(),
+      broker: f.broker.value.trim(),
       links: $$(".link-row", f)
         .map((r) => ({ title: r.querySelector("[data-k=title]").value.trim(), url: r.querySelector("[data-k=url]").value.trim() }))
         .filter((l) => l.url)
