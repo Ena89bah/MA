@@ -386,3 +386,11 @@ body.read-only [data-action="toggle-done"], body.read-only [data-action="toggle-
 .badge.bad { background: #b91c1c; color: #fff; }
 /* خلفية محايدة حتى تظهر الشعارات البيضاء والسوداء في الوضعين */
 img.logo { background: #dfe3e8; }
+
+/* طلبات التأجير */
+.rental-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+.rental { display: grid; gap: 10px; }
+.rental .field { margin: 0; }
+.rental-reviews { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.rental-reviews p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .rental-list { grid-template-columns: 1fr; } }

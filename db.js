@@ -3,7 +3,7 @@ const DB_KEY = "directory_db_v1";
 const TOKEN_KEY = "directory_session";
 
 function emptyDB() {
-  return { categories: [], entities: [], employees: [], tasks: [], taskTypes: [], sources: [] };
+  return { categories: [], entities: [], employees: [], tasks: [], taskTypes: [], sources: [], rentals: [] };
 }
 
 // مصادر بيانات التواصل (الأسعار تقريبية – تحقق منها في مواقعها)

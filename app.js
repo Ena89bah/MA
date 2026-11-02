@@ -13,6 +13,9 @@ const STATUS_CLASS = { official: "ok", called: "ok", unverified: "warn", invalid
 const hasOfficial = (e) => e.contacts.some((c) => c.status === "official" || c.status === "called");
 const tierBadge = (e) => (TIERS.includes(e.tier) ? `<span class="tier tier-${e.tier.toLowerCase()}">${e.tier}</span>` : "");
 const tierRank = (e) => (TIERS.includes(e.tier) ? TIERS.indexOf(e.tier) : TIERS.length);
+const RENTAL_STATUS = ["عرض السعر : قيد التنفيذ", "عرض السعر : تم الارسال", "موعد اجتماع", "متابعة", "تواصل مكرر : لم يتم الرد", "سعر المتر : غير مناسب", "النشاط : غير مناسب", "البراند : غير مطابق للشروط"];
+const RENTAL_LISTS = { active: "الطلبات الحالية", rejected: "المرفوض", done: "مكتمل" };
+const rentalList = (x) => (x.decision === "rejected" ? "rejected" : x.done ? "done" : "active");
 const state = {
   view: "directory",
   catId: null,
@@ -20,6 +23,9 @@ const state = {
   tier: "", // فلتر قوة البراند
   verified: "", // فلتر التأكيد: yes | no
   limit: PAGE_SIZE, // عدد البطاقات المعروضة
+  rentalList: "active",
+  rentalStatus: "",
+  rentalSearch: "",
   taskStatus: "open", // all | open | done
   taskEmp: "",
   taskType: "",
@@ -66,7 +72,7 @@ async function commit(msg) {
 }
 
 // ---------- الدخول والصلاحيات ----------
-const VIEWS = { directory: "البراندات", tasks: "المهام", employees: "الموظفين", sources: "مصادر البيانات", settings: "البيانات" };
+const VIEWS = { directory: "البراندات", tasks: "المهام", rentals: "طلبات التأجير", employees: "الموظفين", sources: "مصادر البيانات", settings: "البيانات" };
 const ROLES = { admin: "مدير", employee: "موظف", viewer: "مشاهد فقط" };
 const isAdmin = () => Store.mode !== "supabase" || Store.user?.role === "admin";
 const isViewer = () => Store.mode === "supabase" && Store.user?.role === "viewer";
@@ -116,6 +122,7 @@ const empName = (id) => tv(D().employees.find((e) => e.id === id)?.name) || t("�
 const entById = (id) => D().entities.find((e) => e.id === id);
 const catById = (id) => D().categories.find((c) => c.id === id);
 const taskById = (id) => D().tasks.find((x) => x.id === id);
+const rentalById = (id) => D().rentals.find((x) => x.id === id);
 const openTasksFor = (pred) => D().tasks.filter((x) => !x.done && !x.hidden && pred(x)).length;
 
 // صور Wix الأصلية كبيرة؛ نطلب نسخة صغيرة لتسريع التحميل على الجوال
@@ -167,7 +174,7 @@ function render() {
   $$(".tabs button").forEach((b) => { b.hidden = !canAccess(b.dataset.view); });
   if (!state.view) { $("#app").innerHTML = `<p class="empty">${t("لا يوجد قسم مسموح لك. تواصل مع المدير")}</p>`; return; }
   $$(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === state.view));
-  const views = { directory: renderDirectory, tasks: renderTasks, employees: renderEmployees, sources: renderSources, settings: renderSettings };
+  const views = { directory: renderDirectory, tasks: renderTasks, rentals: renderRentals, employees: renderEmployees, sources: renderSources, settings: renderSettings };
   $("#app").innerHTML = views[state.view]();
   const selAll = $("#selAll");
   if (selAll) selAll.indeterminate = selAll.dataset.partial === "1";
@@ -449,6 +456,109 @@ function renderTasks() {
     </div>` : ""}
     ${bulkBar}
     <div class="task-list">${rows}</div>`;
+}
+
+function statusOptions(selected) {
+  // حالة قديمة غير موجودة في القائمة تبقى ظاهرة حتى لا تضيع
+  const list = selected && !RENTAL_STATUS.includes(selected) ? [selected, ...RENTAL_STATUS] : RENTAL_STATUS;
+  return `<option value="">${t("— بدون حالة —")}</option>` +
+    list.map((x) => `<option value="${esc(x)}" ${x === selected ? "selected" : ""}>${esc(tv(x))}</option>`).join("");
+}
+
+function rentalRows() {
+  const q = state.rentalSearch.trim().toLowerCase();
+  const list = (D().rentals || [])
+    .filter((x) => rentalList(x) === state.rentalList)
+    .filter((x) => !state.rentalStatus || x.status === state.rentalStatus)
+    .filter((x) => !q || [x.brandName, x.area, x.reviews].some((v) => String(v || "").toLowerCase().includes(q)))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  if (!list.length) return `<p class="empty">${t("لا توجد طلبات")}</p>`;
+  return list.map((x) => {
+    const ent = entById(x.entityId);
+    const where = rentalList(x);
+    return `
+      <article class="card rental">
+        <div class="ent-head">
+          ${logoHtml(ent || { name: x.brandName })}
+          <div class="ent-title">
+            ${ent ? `<strong>${tierBadge(ent)} <button type="button" class="link-btn" data-action="open-ent" data-id="${ent.id}">${esc(x.brandName)}</button></strong>` : `<strong>${esc(x.brandName)}</strong>`}
+            ${x.area ? `<small>${t("المساحة")}: <span dir="ltr">${esc(x.area)}</span></small>` : ""}
+          </div>
+          ${x.decision === "accepted" ? `<span class="badge ok">${t("مقبول")}</span>` : x.decision === "rejected" ? `<span class="badge bad">${t("مرفوض")}</span>` : ""}
+        </div>
+        ${(x.links || []).length ? `<div class="links">${x.links.map((l) => `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">🔗 ${esc(tv(l.title) || l.url)}</a>`).join("")}</div>` : ""}
+        ${x.reviews ? `<div class="rental-reviews"><b>${t("التقييمات")}</b><p>${esc(x.reviews)}</p></div>` : ""}
+        <div class="field"><label>${t("الحالة")}</label>
+          <select class="input" data-action="rental-status" data-id="${x.id}">${statusOptions(x.status)}</select>
+        </div>
+        <div class="card-actions">
+          ${where === "active" ? `
+            <button class="btn sm primary" data-action="rental-accept" data-id="${x.id}" ${x.decision === "accepted" ? "disabled" : ""}>${t("قبول")}</button>
+            <button class="btn sm danger" data-action="rental-reject" data-id="${x.id}">${t("رفض")}</button>
+            <button class="btn sm" data-action="rental-done" data-id="${x.id}">${t("مكتمل")}</button>` : `
+            <button class="btn sm" data-action="rental-restore" data-id="${x.id}">${t("إرجاع إلى الطلبات الحالية")}</button>`}
+          <button class="btn sm" data-action="edit-rental" data-id="${x.id}">${t("تعديل")}</button>
+          <button class="btn sm danger" data-action="del-rental" data-id="${x.id}">${t("حذف")}</button>
+        </div>
+      </article>`;
+  }).join("");
+}
+
+function renderRentals() {
+  const all = D().rentals || [];
+  const count = (k) => all.filter((x) => rentalList(x) === k).length;
+  return `
+    <div class="toolbar">
+      <h2>${t("طلبات التأجير")}</h2>
+      <span class="spacer"></span>
+      <button class="btn primary" data-action="new-rental">${t("+ طلب تأجير")}</button>
+    </div>
+    <div class="stats">
+      ${Object.entries(RENTAL_LISTS).map(([k, v]) => `<div class="stat ${state.rentalList === k ? "active" : ""}" data-action="rental-list" data-v="${k}" role="button" tabindex="0">${t(v)}<b>${count(k)}</b></div>`).join("")}
+    </div>
+    <div class="toolbar">
+      <input class="input" id="rentalSearch" type="search" autocomplete="off" placeholder="${t("🔍 بحث في طلبات التأجير…")}" value="${esc(state.rentalSearch)}" style="flex:1;min-width:200px">
+      <select class="input" id="fRentalStatus" aria-label="${t("الحالة")}">
+        <option value="">${t("كل الحالات")}</option>
+        ${RENTAL_STATUS.map((x) => `<option value="${esc(x)}" ${state.rentalStatus === x ? "selected" : ""}>${esc(tv(x))}</option>`).join("")}
+      </select>
+    </div>
+    <div class="rental-list">${rentalRows()}</div>`;
+}
+
+function rentalModal(item) {
+  const x = item || { brandName: "", area: "", links: [], reviews: "", status: "" };
+  openModal(`
+    <h3>${item ? t("تعديل طلب تأجير") : t("طلب تأجير جديد")}</h3>
+    <div class="field"><label>${t("اسم البراند")}</label>
+      <input class="input" name="brandName" list="brandNames" value="${esc(x.brandName)}" autocomplete="off" required>
+      <datalist id="brandNames">${D().entities.map((e) => `<option value="${esc(e.name)}"></option>`).join("")}</datalist>
+    </div>
+    <div class="field"><label>${t("المساحة")}</label><input class="input" name="area" value="${esc(x.area)}" placeholder="${t("مثال: 250 م²")}"></div>
+    <div class="field"><label>${t("الحالة")}</label><select class="input" name="status">${statusOptions(x.status)}</select></div>
+    <div class="field">
+      <label>${t("روابط")}</label>
+      <div id="links" style="display:grid;gap:6px">${(x.links || []).map(linkRow).join("")}</div>
+      <div><button type="button" class="btn sm" data-action="add-link">${t("+ رابط")}</button></div>
+    </div>
+    <div class="field"><label>${t("التقييمات")}</label><textarea class="input" name="reviews" rows="5">${esc(x.reviews)}</textarea></div>
+    ${modalActions()}`, (f) => {
+    const brandName = f.brandName.value.trim();
+    const data = {
+      brandName,
+      // ربط الطلب بالبراند إذا طابق الاسم سجلاً في القائمة
+      entityId: D().entities.find((e) => e.name === brandName)?.id || "",
+      area: f.area.value.trim(),
+      status: f.status.value,
+      reviews: f.reviews.value.trim(),
+      links: $$(".link-row", f)
+        .map((r) => ({ title: r.querySelector("[data-k=title]").value.trim(), url: r.querySelector("[data-k=url]").value.trim() }))
+        .filter((l) => l.url)
+    };
+    if (item) Object.assign(item, data);
+    else D().rentals.push({ id: uid(), decision: "", done: false, createdAt: Date.now(), ...data });
+    commit(t("تم الحفظ"));
+  });
 }
 
 function renderEmployees() {
@@ -949,6 +1059,23 @@ const actions = {
   },
   "add-contact": () => $("#contacts").insertAdjacentHTML("beforeend", contactRow()),
   "rm-contact": (el) => el.closest(".contact-row").remove(),
+  "new-rental": () => rentalModal(),
+  "edit-rental": (el) => rentalModal(rentalById(el.dataset.id)),
+  "rental-list": (el) => { state.rentalList = el.dataset.v; render(); },
+  "rental-accept": (el) => { rentalById(el.dataset.id).decision = "accepted"; commit(t("تم قبول الطلب")); },
+  "rental-reject": (el) => { rentalById(el.dataset.id).decision = "rejected"; commit(t("تم نقل الطلب إلى المرفوض")); },
+  "rental-done": (el) => { rentalById(el.dataset.id).done = true; commit(t("تم نقل الطلب إلى مكتمل")); },
+  "rental-restore": (el) => {
+    const x = rentalById(el.dataset.id);
+    x.done = false;
+    if (x.decision === "rejected") x.decision = "";
+    commit(t("تمت إعادة الطلب"));
+  },
+  "del-rental": (el) => {
+    if (!confirm(t("حذف هذا الطلب؟"))) return;
+    D().rentals = D().rentals.filter((x) => x.id !== el.dataset.id);
+    commit(t("تم الحذف"));
+  },
   "add-link": () => $("#links").insertAdjacentHTML("beforeend", linkRow()),
   "rm-link": (el) => el.closest(".link-row").remove(),
   "rm-file": (el) => { modalFiles.splice(Number(el.dataset.i), 1); renderModalFiles(); },
@@ -1094,6 +1221,12 @@ document.addEventListener("click", (ev) => {
 
 document.addEventListener("change", (ev) => {
   const el = ev.target;
+  if (el.dataset.action === "rental-status") {
+    rentalById(el.dataset.id).status = el.value;
+    commit(t("تم تحديث الحالة"));
+    return;
+  }
+  if (el.id === "fRentalStatus") { state.rentalStatus = el.value; render(); return; }
   if (el.dataset.action === "assign-task") {
     taskById(el.dataset.id).employeeId = el.value;
     commit(t("تم الإسناد إلى {name}", { name: empName(el.value) }));
@@ -1115,6 +1248,11 @@ document.addEventListener("change", (ev) => {
 });
 
 document.addEventListener("input", (ev) => {
+  if (ev.target.id === "rentalSearch") {
+    state.rentalSearch = ev.target.value;
+    $(".rental-list").innerHTML = rentalRows();
+    return;
+  }
   if (ev.target.id === "search") {
     // نحدّث النتائج فقط دون إعادة رسم حقل البحث، حتى لا تُغلق لوحة المفاتيح على الجوال
     state.search = ev.target.value;
@@ -1150,7 +1288,7 @@ document.addEventListener("submit", async (ev) => {
     try {
       const u = await Store.saveUser({
         name: f.name.value.trim(), password: f.password.value, role, active: true,
-        access: role === "admin" ? Object.keys(VIEWS) : ["directory", "tasks", "sources"]
+        access: role === "admin" ? Object.keys(VIEWS) : ["directory", "tasks", "rentals", "sources"]
       });
       state.users.push(u);
       D().employees.push({ id: u.id, name: u.name });
