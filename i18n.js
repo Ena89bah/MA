@@ -3,6 +3,8 @@
 let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
+  "بدون تكرار": "no duplicates",
+  "يتكرر عند": "Also listed for",
   "إرسال واتساب": "WhatsApp sending",
   "يستخدم أرقام الجوال فقط من النتائج أعلاه. كل زر يفتح واتساب برسالتك جاهزة، ثم تضغط إرسال بنفسك.": "Uses only the mobile numbers from the results above. Each button opens WhatsApp with your message ready; you press send yourself.",
   "نص الرسالة": "Message",

@@ -606,15 +606,24 @@ function rentalModal(item) {
 }
 
 // ---------- استخراج الإيميلات والأرقام ----------
-const phoneDigits = (p) => { let d = String(p || "").replace(/\D/g, "").replace(/^00/, ""); if (d.startsWith("966")) { d = d.slice(3); if (!/^(800|92)/.test(d)) d = "0" + d; } return d; };
+// أرقام عربية أو صيغ مختلفة لنفس الرقم تتحول لصيغة واحدة حتى لا يتكرر
+const latinDigits = (p) => String(p || "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d));
+const cleanEmail = (e) => String(e || "").trim().replace(/^mailto:/i, "").replace(/[.,;]+$/, "").toLowerCase();
+const phoneDigits = (p) => { let d = latinDigits(p).replace(/\D/g, "").replace(/^00/, ""); if (/^(5\d{8}|1[1-7]\d{7})$/.test(d)) d = "0" + d; if (d.startsWith("966")) { d = d.slice(3); if (!/^(800|92)/.test(d)) d = "0" + d; } return d; };
 const phoneType = (d) => (/^05\d{8}$/.test(d) ? "mobile" : /^01\d{7,8}$/.test(d) ? "landline" : /^(920\d{6}|800\d{7})$/.test(d) ? "unified" : "other");
 const PHONE_TYPES = { mobile: "جوال (واتساب)", landline: "هاتف ثابت", unified: "رقم موحد", other: "أخرى" };
 
 // كل صف: البراند، التصنيف، المستوى، القيمة، حالة التحقق. القيمة لا تتكرر
 function exportRows(kind) {
   const f = state.exp;
-  const rows = [], seen = new Set();
-  const push = (r) => { const k = r.value.toLowerCase(); if (!seen.has(k)) { seen.add(k); rows.push(r); } };
+  // القيمة تظهر مرة واحدة فقط؛ إذا تكررت عند براند آخر يُذكر ذلك في عمود "يتكرر عند"
+  const rows = [], seen = new Map();
+  const push = (r) => {
+    const k = r.value.toLowerCase();
+    const first = seen.get(k);
+    if (!first) { r.others = []; seen.set(k, r); rows.push(r); }
+    else if (r.brand !== first.brand && !first.others.includes(r.brand)) first.others.push(r.brand);
+  };
   if (f.source === "rentals") {
     if (kind !== "phone") return rows;
     for (const x of D().rentals || []) {
@@ -634,7 +643,7 @@ function exportRows(kind) {
       if (f.verified === "official" && c.status !== "official" && c.status !== "called") continue;
       if (c.status === "invalid") continue;
       let value = "";
-      if (kind === "email") value = String(c.email || "").trim().toLowerCase();
+      if (kind === "email") value = cleanEmail(c.email);
       else {
         const d = phoneDigits(c.phone);
         if (d && (!f.phoneType || phoneType(d) === f.phoneType)) value = f.format === "intl" && /^0/.test(d) ? "966" + d.slice(1) : d;
@@ -722,14 +731,15 @@ function renderExport(kind) {
     ${isPhone ? waSection() : ""}
     <div class="toolbar">
       <b>${t(isPhone ? "{n} رقم" : "{n} إيميل", { n: rows.length })}</b>
+      <span class="task-meta">${t("بدون تكرار")}</span>
       <span class="spacer"></span>
       <button class="btn" data-action="exp-copy" data-kind="${kind}" ${rows.length ? "" : "disabled"}>${t("نسخ الكل")}</button>
       <button class="btn primary" data-action="exp-csv" data-kind="${kind}" ${rows.length ? "" : "disabled"}>${t("تنزيل ملف Excel (CSV)")}</button>
     </div>
     ${rows.length ? `
     <div class="table-wrap"><table class="exp-table">
-      <thead><tr><th>${t("البراند")}</th><th>${t("التصنيف")}</th><th>${t("المستوى")}</th><th>${t("جهة التواصل")}</th><th>${t(isPhone ? "الرقم" : "الإيميل")}</th><th>${t("الحالة")}</th></tr></thead>
-      <tbody>${rows.slice(0, 300).map((r) => `<tr><td>${esc(r.brand)}</td><td>${esc(r.category)}</td><td>${r.tier ? `<span class="tier tier-${r.tier.toLowerCase()}">${r.tier}</span>` : ""}</td><td>${esc(r.contact)}</td><td dir="ltr">${esc(r.value)}</td><td>${esc(r.status)}</td></tr>`).join("")}</tbody>
+      <thead><tr><th>${t("البراند")}</th><th>${t("التصنيف")}</th><th>${t("المستوى")}</th><th>${t("جهة التواصل")}</th><th>${t(isPhone ? "الرقم" : "الإيميل")}</th><th>${t("الحالة")}</th><th>${t("يتكرر عند")}</th></tr></thead>
+      <tbody>${rows.slice(0, 300).map((r) => `<tr><td>${esc(r.brand)}</td><td>${esc(r.category)}</td><td>${r.tier ? `<span class="tier tier-${r.tier.toLowerCase()}">${r.tier}</span>` : ""}</td><td>${esc(r.contact)}</td><td dir="ltr">${esc(r.value)}</td><td>${esc(r.status)}</td><td title="${esc(r.others.join("، "))}">${r.others.length ? esc(r.others.slice(0, 2).join("، ")) + (r.others.length > 2 ? ` +${r.others.length - 2}` : "") : ""}</td></tr>`).join("")}</tbody>
     </table></div>
     ${rows.length > 300 ? `<p class="task-meta">${t("يظهر أول 300 فقط، والنسخ والتنزيل يشملان الكل")}</p>` : ""}` : `<p class="empty">${t("لا توجد نتائج")}</p>`}`;
 }
@@ -1220,9 +1230,9 @@ const actions = {
   "exp-csv": (el) => {
     const kind = el.dataset.kind;
     const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const head = [t("البراند"), t("التصنيف"), t("المستوى"), t("جهة التواصل"), t(kind === "phone" ? "الرقم" : "الإيميل"), t("الحالة")];
+    const head = [t("البراند"), t("التصنيف"), t("المستوى"), t("جهة التواصل"), t(kind === "phone" ? "الرقم" : "الإيميل"), t("الحالة"), t("يتكرر عند")];
     // رقم يبدأ بصفر يُكتب كنص حتى لا يحذف Excel الصفر
-    const lines = exportRows(kind).map((r) => [r.brand, r.category, r.tier, r.contact, kind === "phone" ? `="${r.value}"` : r.value, r.status].map((v, i) => (i === 4 && kind === "phone" ? v : cell(v))).join(","));
+    const lines = exportRows(kind).map((r) => [r.brand, r.category, r.tier, r.contact, kind === "phone" ? `="${r.value}"` : r.value, r.status, r.others.join("، ")].map((v, i) => (i === 4 && kind === "phone" ? v : cell(v))).join(","));
     const blob = new Blob(["\ufeff" + [head.map(cell).join(","), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
