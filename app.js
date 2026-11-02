@@ -465,6 +465,24 @@ function statusOptions(selected) {
     list.map((x) => `<option value="${esc(x)}" ${x === selected ? "selected" : ""}>${esc(tv(x))}</option>`).join("");
 }
 
+const formatDateTime = (ms) => new Intl.DateTimeFormat(LANG === "ar" ? "ar-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(ms);
+
+function setRentalDecision(x, decision) {
+  x.decision = decision;
+  x.decisionBy = Store.user?.name || "";
+  x.decisionAt = Date.now();
+}
+
+function rentalCreatedLine(x) {
+  return `<p class="task-meta rental-decision">${t("أنشأه")}: <b>${esc(tv(x.createdBy) || "—")}</b> · <span dir="ltr">${esc(formatDateTime(x.createdAt))}</span></p>`;
+}
+
+function rentalDecisionLine(x) {
+  if (!x.decisionAt) return "";
+  const label = x.decision === "accepted" ? t("قبله") : t("رفضه");
+  return `<p class="task-meta rental-decision">${label}: <b>${esc(tv(x.decisionBy) || "—")}</b> · <span dir="ltr">${esc(formatDateTime(x.decisionAt))}</span></p>`;
+}
+
 function rentalRows() {
   const q = state.rentalSearch.trim().toLowerCase();
   const list = (D().rentals || [])
@@ -486,6 +504,8 @@ function rentalRows() {
           </div>
           ${x.decision === "accepted" ? `<span class="badge ok">${t("مقبول")}</span>` : x.decision === "rejected" ? `<span class="badge bad">${t("مرفوض")}</span>` : ""}
         </div>
+        ${rentalCreatedLine(x)}
+        ${rentalDecisionLine(x)}
         ${(x.links || []).length ? `<div class="links">${x.links.map((l) => `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">🔗 ${esc(tv(l.title) || l.url)}</a>`).join("")}</div>` : ""}
         ${x.reviews ? `<div class="rental-reviews"><b>${t("التقييمات")}</b><p>${esc(x.reviews)}</p></div>` : ""}
         <div class="field"><label>${t("الحالة")}</label>
@@ -556,7 +576,7 @@ function rentalModal(item) {
         .filter((l) => l.url)
     };
     if (item) Object.assign(item, data);
-    else D().rentals.push({ id: uid(), decision: "", done: false, createdAt: Date.now(), ...data });
+    else D().rentals.push({ id: uid(), decision: "", done: false, createdAt: Date.now(), createdBy: Store.user?.name || "", ...data });
     commit(t("تم الحفظ"));
   });
 }
@@ -1062,13 +1082,13 @@ const actions = {
   "new-rental": () => rentalModal(),
   "edit-rental": (el) => rentalModal(rentalById(el.dataset.id)),
   "rental-list": (el) => { state.rentalList = el.dataset.v; render(); },
-  "rental-accept": (el) => { rentalById(el.dataset.id).decision = "accepted"; commit(t("تم قبول الطلب")); },
-  "rental-reject": (el) => { rentalById(el.dataset.id).decision = "rejected"; commit(t("تم نقل الطلب إلى المرفوض")); },
+  "rental-accept": (el) => { setRentalDecision(rentalById(el.dataset.id), "accepted"); commit(t("تم قبول الطلب")); },
+  "rental-reject": (el) => { setRentalDecision(rentalById(el.dataset.id), "rejected"); commit(t("تم نقل الطلب إلى المرفوض")); },
   "rental-done": (el) => { rentalById(el.dataset.id).done = true; commit(t("تم نقل الطلب إلى مكتمل")); },
   "rental-restore": (el) => {
     const x = rentalById(el.dataset.id);
     x.done = false;
-    if (x.decision === "rejected") x.decision = "";
+    if (x.decision === "rejected") { x.decision = ""; x.decisionBy = ""; x.decisionAt = 0; }
     commit(t("تمت إعادة الطلب"));
   },
   "del-rental": (el) => {

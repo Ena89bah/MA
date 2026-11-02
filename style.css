@@ -394,3 +394,4 @@ img.logo { background: #dfe3e8; }
 .rental-reviews { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .rental-reviews p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 520px) { .rental-list { grid-template-columns: 1fr; } }
+.rental-decision { margin: 0; }

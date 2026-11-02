@@ -3,6 +3,9 @@
 let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
+  "أنشأه": "Created by",
+  "قبله": "Accepted by",
+  "رفضه": "Rejected by",
   "طلبات التأجير": "Rental Requests",
   "+ طلب تأجير": "+ Rental request",
   "الطلبات الحالية": "Current requests",
