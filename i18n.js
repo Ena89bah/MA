@@ -3,6 +3,11 @@
 let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
+  "المخفي": "Hidden",
+  "أخفاه": "Hidden by",
+  "غير مناسب": "Unsuitable",
+  "تم نقل الطلب إلى المخفي": "Request moved to Hidden",
+  "تم إظهار الطلب": "Request shown again",
   "الإرسال عبر (يُحفظ على هذا الجهاز)": "Send via (saved on this device)",
   "واتساب للأعمال": "WhatsApp Business",
   "واتساب ويب": "WhatsApp Web",

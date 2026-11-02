@@ -13,9 +13,9 @@ const STATUS_CLASS = { official: "ok", called: "ok", unverified: "warn", invalid
 const hasOfficial = (e) => e.contacts.some((c) => c.status === "official" || c.status === "called");
 const tierBadge = (e) => (TIERS.includes(e.tier) ? `<span class="tier tier-${e.tier.toLowerCase()}">${e.tier}</span>` : "");
 const tierRank = (e) => (TIERS.includes(e.tier) ? TIERS.indexOf(e.tier) : TIERS.length);
-const RENTAL_STATUS = ["عرض السعر : قيد التنفيذ", "عرض السعر : تم الارسال", "موعد اجتماع", "متابعة", "تواصل مكرر : لم يتم الرد", "سعر المتر : غير مناسب", "النشاط : غير مناسب", "البراند : غير مطابق للشروط"];
-const RENTAL_LISTS = { active: "الطلبات الحالية", rejected: "المرفوض", done: "مكتمل" };
-const rentalList = (x) => (x.decision === "rejected" ? "rejected" : x.done ? "done" : "active");
+const RENTAL_STATUS = ["عرض السعر : قيد التنفيذ", "عرض السعر : تم الارسال", "موعد اجتماع", "متابعة", "تواصل مكرر : لم يتم الرد", "سعر المتر : غير مناسب", "النشاط : غير مناسب", "البراند : غير مطابق للشروط", "مكتمل", "غير مناسب"];
+const RENTAL_LISTS = { active: "الطلبات الحالية", rejected: "المرفوض", done: "مكتمل", hidden: "المخفي" };
+const rentalList = (x) => (x.hidden ? "hidden" : x.decision === "rejected" ? "rejected" : x.done ? "done" : "active");
 const state = {
   view: "directory",
   catId: null,
@@ -516,17 +516,20 @@ function rentalRows() {
         ${x.notes ? `<p class="notes">📝 ${esc(x.notes)}</p>` : ""}
         ${rentalCreatedLine(x)}
         ${rentalDecisionLine(x)}
+        ${x.hidden && x.hiddenAt ? `<p class="task-meta rental-decision">${t("أخفاه")}: <b>${esc(tv(x.hiddenBy) || "—")}</b> · <span dir="ltr">${esc(formatDateTime(x.hiddenAt))}</span></p>` : ""}
         ${(x.links || []).length ? `<div class="links">${x.links.map((l) => `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">🔗 ${esc(tv(l.title) || l.url)}</a>`).join("")}</div>` : ""}
         ${x.reviews ? `<div class="rental-reviews"><b>${t("التقييمات")}</b><p>${esc(x.reviews)}</p></div>` : ""}
         <div class="field"><label>${t("الحالة")}</label>
           <select class="input" data-action="rental-status" data-id="${x.id}">${statusOptions(x.status)}</select>
         </div>
         <div class="card-actions">
-          ${where === "active" ? `
+          ${where === "hidden" ? `
+            <button class="btn sm" data-action="rental-unhide" data-id="${x.id}">${t("إظهار")}</button>` : where === "active" ? `
             <button class="btn sm primary" data-action="rental-accept" data-id="${x.id}" ${x.decision === "accepted" ? "disabled" : ""}>${t("قبول")}</button>
             <button class="btn sm danger" data-action="rental-reject" data-id="${x.id}">${t("رفض")}</button>
             <button class="btn sm" data-action="rental-done" data-id="${x.id}">${t("مكتمل")}</button>` : `
             <button class="btn sm" data-action="rental-restore" data-id="${x.id}">${t("إرجاع إلى الطلبات الحالية")}</button>`}
+          ${where !== "hidden" ? `<button class="btn sm" data-action="rental-hide" data-id="${x.id}">${t("إخفاء")}</button>` : ""}
           <button class="btn sm" data-action="edit-rental" data-id="${x.id}">${t("تعديل")}</button>
           <button class="btn sm danger" data-action="del-rental" data-id="${x.id}">${t("حذف")}</button>
         </div>
@@ -1303,6 +1306,15 @@ const actions = {
   "rental-accept": (el) => { setRentalDecision(rentalById(el.dataset.id), "accepted"); commit(t("تم قبول الطلب")); },
   "rental-reject": (el) => { setRentalDecision(rentalById(el.dataset.id), "rejected"); commit(t("تم نقل الطلب إلى المرفوض")); },
   "rental-done": (el) => { rentalById(el.dataset.id).done = true; commit(t("تم نقل الطلب إلى مكتمل")); },
+  "rental-hide": (el) => {
+    const x = rentalById(el.dataset.id);
+    Object.assign(x, { hidden: true, hiddenBy: Store.user?.name || "", hiddenAt: Date.now() });
+    commit(t("تم نقل الطلب إلى المخفي"));
+  },
+  "rental-unhide": (el) => {
+    Object.assign(rentalById(el.dataset.id), { hidden: false, hiddenBy: "", hiddenAt: 0 });
+    commit(t("تم إظهار الطلب"));
+  },
   "rental-restore": (el) => {
     const x = rentalById(el.dataset.id);
     x.done = false;
