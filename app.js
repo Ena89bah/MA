@@ -26,6 +26,7 @@ const state = {
   rentalList: "active",
   rentalStatus: "",
   rentalSearch: "",
+  exp: { source: "brands", catId: "", tier: "", verified: "", phoneType: "", rentalList: "active", rentalStatus: "", format: "local" },
   taskStatus: "open", // all | open | done
   taskEmp: "",
   taskType: "",
@@ -72,7 +73,7 @@ async function commit(msg) {
 }
 
 // ---------- الدخول والصلاحيات ----------
-const VIEWS = { directory: "البراندات", tasks: "المهام", rentals: "طلبات التأجير", employees: "الموظفين", sources: "مصادر البيانات", settings: "البيانات" };
+const VIEWS = { directory: "البراندات", tasks: "المهام", rentals: "طلبات التأجير", emails: "استخراج الإيميلات", phones: "استخراج الأرقام", employees: "الموظفين", sources: "مصادر البيانات", settings: "البيانات" };
 const ROLES = { admin: "مدير", employee: "موظف", viewer: "مشاهد فقط" };
 const isAdmin = () => Store.mode !== "supabase" || Store.user?.role === "admin";
 const isViewer = () => Store.mode === "supabase" && Store.user?.role === "viewer";
@@ -174,7 +175,7 @@ function render() {
   $$(".tabs button").forEach((b) => { b.hidden = !canAccess(b.dataset.view); });
   if (!state.view) { $("#app").innerHTML = `<p class="empty">${t("لا يوجد قسم مسموح لك. تواصل مع المدير")}</p>`; return; }
   $$(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === state.view));
-  const views = { directory: renderDirectory, tasks: renderTasks, rentals: renderRentals, employees: renderEmployees, sources: renderSources, settings: renderSettings };
+  const views = { directory: renderDirectory, tasks: renderTasks, rentals: renderRentals, emails: () => renderExport("email"), phones: () => renderExport("phone"), employees: renderEmployees, sources: renderSources, settings: renderSettings };
   $("#app").innerHTML = views[state.view]();
   const selAll = $("#selAll");
   if (selAll) selAll.indeterminate = selAll.dataset.partial === "1";
@@ -601,6 +602,81 @@ function rentalModal(item) {
     else D().rentals.push({ id: uid(), decision: "", done: false, createdAt: Date.now(), createdBy: Store.user?.name || "", ...data });
     commit(t("تم الحفظ"));
   });
+}
+
+// ---------- استخراج الإيميلات والأرقام ----------
+const phoneDigits = (p) => { let d = String(p || "").replace(/\D/g, "").replace(/^00/, ""); if (d.startsWith("966")) { d = d.slice(3); if (!/^(800|92)/.test(d)) d = "0" + d; } return d; };
+const phoneType = (d) => (/^05\d{8}$/.test(d) ? "mobile" : /^01\d{7,8}$/.test(d) ? "landline" : /^(920\d{6}|800\d{7})$/.test(d) ? "unified" : "other");
+const PHONE_TYPES = { mobile: "جوال (واتساب)", landline: "هاتف ثابت", unified: "رقم موحد", other: "أخرى" };
+
+// كل صف: البراند، التصنيف، المستوى، القيمة، حالة التحقق. القيمة لا تتكرر
+function exportRows(kind) {
+  const f = state.exp;
+  const rows = [], seen = new Set();
+  const push = (r) => { const k = r.value.toLowerCase(); if (!seen.has(k)) { seen.add(k); rows.push(r); } };
+  if (f.source === "rentals") {
+    if (kind !== "phone") return rows;
+    for (const x of D().rentals || []) {
+      if (rentalList(x) !== f.rentalList || (f.rentalStatus && x.status !== f.rentalStatus)) continue;
+      const d = phoneDigits(x.contactPhone);
+      if (!d || (f.phoneType && phoneType(d) !== f.phoneType)) continue;
+      push({ brand: x.brandName, category: t("طلبات التأجير"), tier: "", contact: x.contactName || "", value: f.format === "intl" ? d.replace(/^0(?=5)/, "966") : d, status: "" });
+    }
+    return rows;
+  }
+  for (const e of D().entities) {
+    const cat = catById(e.categoryId);
+    if (e.hidden || cat?.hidden) continue;
+    if (f.catId && e.categoryId !== f.catId) continue;
+    if (f.tier && (f.tier === "none" ? TIERS.includes(e.tier) : e.tier !== f.tier)) continue;
+    for (const c of e.contacts) {
+      if (f.verified === "official" && c.status !== "official" && c.status !== "called") continue;
+      if (c.status === "invalid") continue;
+      let value = "";
+      if (kind === "email") value = String(c.email || "").trim().toLowerCase();
+      else {
+        const d = phoneDigits(c.phone);
+        if (d && (!f.phoneType || phoneType(d) === f.phoneType)) value = f.format === "intl" && /^0/.test(d) ? "966" + d.slice(1) : d;
+      }
+      if (value) push({ brand: e.name, category: tv(cat?.name || ""), tier: e.tier || "", contact: tv(c.name) || "", value, status: CONTACT_STATUS[c.status] ? t(CONTACT_STATUS[c.status]) : "" });
+    }
+  }
+  return rows;
+}
+
+function renderExport(kind) {
+  const f = state.exp;
+  const isPhone = kind === "phone";
+  if (!isPhone && f.source === "rentals") f.source = "brands";
+  const rows = exportRows(kind);
+  const sel = (k, opts, label) => `<label class="exp-filter"><span>${label}</span><select class="input" data-action="exp-filter" data-k="${k}">${opts.map(([v, txt]) => `<option value="${esc(v)}" ${f[k] === v ? "selected" : ""}>${esc(txt)}</option>`).join("")}</select></label>`;
+  const brandFilters = `
+    ${sel("catId", [["", t("كل التصنيفات")], ...D().categories.map((c) => [c.id, tv(c.name)])], t("التصنيف"))}
+    ${sel("tier", [["", t("الكل")], ...TIERS.map((x) => [x, x]), ["none", t("بدون تصنيف")]], t("قوة البراند"))}
+    ${sel("verified", [["", t("كل البيانات")], ["official", t("المؤكد فقط")]], t("التأكيد"))}`;
+  const rentalFilters = `
+    ${sel("rentalList", Object.entries(RENTAL_LISTS).map(([k, v]) => [k, t(v)]), t("القائمة"))}
+    ${sel("rentalStatus", [["", t("كل الحالات")], ...RENTAL_STATUS.map((x) => [x, tv(x)])], t("الحالة"))}`;
+  return `
+    <div class="toolbar"><h2>${t(isPhone ? "استخراج الأرقام" : "استخراج الإيميلات")}</h2></div>
+    <div class="card exp-filters">
+      ${isPhone ? sel("source", [["brands", t("البراندات")], ["rentals", t("طلبات التأجير")]], t("المصدر")) : ""}
+      ${f.source === "rentals" ? rentalFilters : brandFilters}
+      ${isPhone ? sel("phoneType", [["", t("كل الأنواع")], ...Object.entries(PHONE_TYPES).map(([k, v]) => [k, t(v)])], t("نوع الرقم")) : ""}
+      ${isPhone ? sel("format", [["local", "05xxxxxxxx"], ["intl", "9665xxxxxxxx"]], t("صيغة الرقم")) : ""}
+    </div>
+    <div class="toolbar">
+      <b>${t(isPhone ? "{n} رقم" : "{n} إيميل", { n: rows.length })}</b>
+      <span class="spacer"></span>
+      <button class="btn" data-action="exp-copy" data-kind="${kind}" ${rows.length ? "" : "disabled"}>${t("نسخ الكل")}</button>
+      <button class="btn primary" data-action="exp-csv" data-kind="${kind}" ${rows.length ? "" : "disabled"}>${t("تنزيل ملف Excel (CSV)")}</button>
+    </div>
+    ${rows.length ? `
+    <div class="table-wrap"><table class="exp-table">
+      <thead><tr><th>${t("البراند")}</th><th>${t("التصنيف")}</th><th>${t("المستوى")}</th><th>${t("جهة التواصل")}</th><th>${t(isPhone ? "الرقم" : "الإيميل")}</th><th>${t("الحالة")}</th></tr></thead>
+      <tbody>${rows.slice(0, 300).map((r) => `<tr><td>${esc(r.brand)}</td><td>${esc(r.category)}</td><td>${r.tier ? `<span class="tier tier-${r.tier.toLowerCase()}">${r.tier}</span>` : ""}</td><td>${esc(r.contact)}</td><td dir="ltr">${esc(r.value)}</td><td>${esc(r.status)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    ${rows.length > 300 ? `<p class="task-meta">${t("يظهر أول 300 فقط، والنسخ والتنزيل يشملان الكل")}</p>` : ""}` : `<p class="empty">${t("لا توجد نتائج")}</p>`}`;
 }
 
 function renderEmployees() {
@@ -1065,6 +1141,24 @@ const actions = {
     try { await navigator.clipboard.writeText(el.dataset.v); toast(t("تم النسخ")); }
     catch { prompt(t("انسخ:"), el.dataset.v); }
   },
+  "exp-copy": async (el) => {
+    const text = exportRows(el.dataset.kind).map((r) => r.value).join("\n");
+    try { await navigator.clipboard.writeText(text); toast(t("تم النسخ")); }
+    catch { prompt(t("انسخ:"), text); }
+  },
+  "exp-csv": (el) => {
+    const kind = el.dataset.kind;
+    const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const head = [t("البراند"), t("التصنيف"), t("المستوى"), t("جهة التواصل"), t(kind === "phone" ? "الرقم" : "الإيميل"), t("الحالة")];
+    // رقم يبدأ بصفر يُكتب كنص حتى لا يحذف Excel الصفر
+    const lines = exportRows(kind).map((r) => [r.brand, r.category, r.tier, r.contact, kind === "phone" ? `="${r.value}"` : r.value, r.status].map((v, i) => (i === 4 && kind === "phone" ? v : cell(v))).join(","));
+    const blob = new Blob(["\ufeff" + [head.map(cell).join(","), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${kind === "phone" ? "phones" : "emails"}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
   "toggle-lang": () => setLang(LANG === "ar" ? "en" : "ar"),
   "new-cat": () => categoryModal(),
   "edit-cat": (el) => categoryModal(catById(el.dataset.id)),
@@ -1269,6 +1363,7 @@ document.addEventListener("change", (ev) => {
     return;
   }
   if (el.id === "fRentalStatus") { state.rentalStatus = el.value; render(); return; }
+  if (el.dataset.action === "exp-filter") { state.exp[el.dataset.k] = el.value; render(); return; }
   if (el.dataset.action === "assign-task") {
     taskById(el.dataset.id).employeeId = el.value;
     commit(t("تم الإسناد إلى {name}", { name: empName(el.value) }));
