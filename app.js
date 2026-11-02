@@ -502,11 +502,14 @@ function rentalRows() {
           ${logoHtml(ent || { name: x.brandName })}
           <div class="ent-title">
             ${ent ? `<strong>${tierBadge(ent)} <button type="button" class="link-btn" data-action="open-ent" data-id="${ent.id}">${esc(x.brandName)}</button></strong>` : `<strong>${esc(x.brandName)}</strong>`}
-            ${x.area ? `<small>${t("المساحة")}: <span dir="ltr">${esc(x.area)}</span></small>` : ""}
           </div>
           ${x.decision === "accepted" ? `<span class="badge ok">${t("مقبول")}</span>` : x.decision === "rejected" ? `<span class="badge bad">${t("مرفوض")}</span>` : ""}
         </div>
-        ${x.contactName || x.contactPhone ? `<div class="detail-line"><span>👤 ${esc(x.contactName || "—")}</span>${x.contactPhone ? `<a href="tel:${esc(x.contactPhone)}" dir="ltr">${esc(x.contactPhone)}</a>` : ""}</div>` : ""}
+        <dl class="rental-info">
+          <dt>${t("الاسم")}</dt><dd>${esc(x.contactName) || "—"}</dd>
+          <dt>${t("رقم التواصل")}</dt><dd>${x.contactPhone ? `<a href="tel:${esc(x.contactPhone)}" dir="ltr">${esc(x.contactPhone)}</a>` : "—"}</dd>
+          <dt>${t("المساحة")}</dt><dd>${esc(x.area) || "—"}</dd>
+        </dl>
         ${x.branches || x.broker ? `<p class="task-meta rental-decision">${x.branches ? `${t("عدد الفروع")}: ${esc(x.branches)}` : ""}${x.branches && x.broker ? " · " : ""}${x.broker ? `${t("الوسيط")}: ${esc(x.broker)}` : ""}</p>` : ""}
         ${x.notes ? `<p class="notes">📝 ${esc(x.notes)}</p>` : ""}
         ${rentalCreatedLine(x)}
