@@ -3,6 +3,10 @@
 let LANG = (() => { try { return localStorage.getItem("lang") || "en"; } catch { return "en"; } })();
 
 const EN = {
+  "الإرسال عبر (يُحفظ على هذا الجهاز)": "Send via (saved on this device)",
+  "واتساب للأعمال": "WhatsApp Business",
+  "واتساب ويب": "WhatsApp Web",
+  "على الكمبيوتر والآيفون يفتح النظام التطبيق المعيّن لروابط واتساب، والاختيار بين النسختين مضمون على أندرويد": "On computers and iPhone the system opens the app set for WhatsApp links; choosing between the two apps is guaranteed on Android",
   "بدون تكرار": "no duplicates",
   "يتكرر عند": "Also listed for",
   "إرسال واتساب": "WhatsApp sending",

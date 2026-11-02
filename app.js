@@ -671,8 +671,25 @@ function waRows() {
   try { return exportRows("phone"); } finally { state.exp = saved; }
 }
 const waText = () => [state.wa.msg.trim(), state.wa.link.trim()].filter(Boolean).join("\n\n");
+// التطبيق المختار يُحفظ على هذا الجهاز فقط، لأن كل جهاز عليه تطبيقاته
+const WA_APP_KEY = "wa_app";
+const WA_APPS = { wa: "واتساب", biz: "واتساب للأعمال", web: "واتساب ويب" };
+const isAndroid = /Android/i.test(navigator.userAgent);
+function waApp() {
+  try { const v = localStorage.getItem(WA_APP_KEY); return WA_APPS[v] ? v : "wa"; } catch { return "wa"; }
+}
 function waOpen(n) {
-  window.open(`https://wa.me/${n}?text=${encodeURIComponent(waText())}`, "_blank", "noopener");
+  const app = waApp(), text = encodeURIComponent(waText());
+  if (app === "web") {
+    // نفس التبويب يُعاد استخدامه لكل رقم
+    window.open(`https://web.whatsapp.com/send?phone=${n}&text=${text}`, "wa_web");
+  } else {
+    // أندرويد يحدد التطبيق بالاسم، وغيره يفتح التطبيق المرتبط بروابط واتساب
+    const url = isAndroid
+      ? `intent://send/?phone=${n}&text=${text}#Intent;scheme=whatsapp;package=${app === "biz" ? "com.whatsapp.w4b" : "com.whatsapp"};end`
+      : `whatsapp://send?phone=${n}&text=${text}`;
+    location.href = url;
+  }
   waMarkOpened(n);
 }
 
@@ -684,6 +701,10 @@ function waSection() {
     <section class="card wa-box">
       <h3>${t("إرسال واتساب")}</h3>
       <p class="task-meta">${t("يستخدم أرقام الجوال فقط من النتائج أعلاه. كل زر يفتح واتساب برسالتك جاهزة، ثم تضغط إرسال بنفسك.")}</p>
+      <div class="field"><label>${t("الإرسال عبر (يُحفظ على هذا الجهاز)")}</label>
+        <select class="input" id="waApp">${Object.entries(WA_APPS).map(([k, v]) => `<option value="${k}" ${waApp() === k ? "selected" : ""}>${t(v)}</option>`).join("")}</select>
+        ${waApp() === "biz" && !isAndroid ? `<small class="task-meta">${t("على الكمبيوتر والآيفون يفتح النظام التطبيق المعيّن لروابط واتساب، والاختيار بين النسختين مضمون على أندرويد")}</small>` : ""}
+      </div>
       <div class="field"><label>${t("نص الرسالة")}</label><textarea class="input" id="waMsg" rows="4">${esc(state.wa.msg)}</textarea></div>
       <div class="field"><label>${t("ملف أو فيديو أو صورة (يُرسل كرابط)")}</label>
         <div class="row">
@@ -1438,6 +1459,7 @@ document.addEventListener("click", (ev) => {
 
 document.addEventListener("change", (ev) => {
   const el = ev.target;
+  if (el.id === "waApp") { try { localStorage.setItem(WA_APP_KEY, el.value); } catch {} render(); return; }
   if (el.dataset.action === "rental-status") {
     rentalById(el.dataset.id).status = el.value;
     commit(t("تم تحديث الحالة"));
