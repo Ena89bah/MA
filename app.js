@@ -26,6 +26,7 @@ const state = {
   rentalList: "active",
   rentalStatus: "",
   rentalSearch: "",
+  wa: { msg: "", link: "", uploading: false },
   exp: { source: "brands", catId: "", tier: "", verified: "", phoneType: "", rentalList: "active", rentalStatus: "", format: "local" },
   taskStatus: "open", // all | open | done
   taskEmp: "",
@@ -644,6 +645,59 @@ function exportRows(kind) {
   return rows;
 }
 
+// ---------- إرسال واتساب بنقرة: يفتح واتساب برسالة جاهزة ويضغط الموظف إرسال ----------
+// واتساب لا يقبل إرفاق ملف عبر الرابط، لذلك يُرسل الملف كرابط داخل الرسالة
+const WA_KEY = "wa_opened";
+const waFingerprint = () => `${state.wa.msg}|${state.wa.link}`;
+function waOpened() {
+  try { const o = JSON.parse(localStorage.getItem(WA_KEY) || "{}"); return new Set(o.fp === waFingerprint() ? o.list : []); } catch { return new Set(); }
+}
+function waMarkOpened(n) {
+  const set = waOpened(); set.add(n);
+  try { localStorage.setItem(WA_KEY, JSON.stringify({ fp: waFingerprint(), list: [...set] })); } catch {}
+}
+function waRows() {
+  const saved = state.exp;
+  state.exp = { ...saved, phoneType: "mobile", format: "intl" };
+  try { return exportRows("phone"); } finally { state.exp = saved; }
+}
+const waText = () => [state.wa.msg.trim(), state.wa.link.trim()].filter(Boolean).join("\n\n");
+function waOpen(n) {
+  window.open(`https://wa.me/${n}?text=${encodeURIComponent(waText())}`, "_blank", "noopener");
+  waMarkOpened(n);
+}
+
+function waSection() {
+  const rows = waRows();
+  const opened = waOpened();
+  const done = rows.filter((r) => opened.has(r.value)).length;
+  return `
+    <section class="card wa-box">
+      <h3>${t("إرسال واتساب")}</h3>
+      <p class="task-meta">${t("يستخدم أرقام الجوال فقط من النتائج أعلاه. كل زر يفتح واتساب برسالتك جاهزة، ثم تضغط إرسال بنفسك.")}</p>
+      <div class="field"><label>${t("نص الرسالة")}</label><textarea class="input" id="waMsg" rows="4">${esc(state.wa.msg)}</textarea></div>
+      <div class="field"><label>${t("ملف أو فيديو أو صورة (يُرسل كرابط)")}</label>
+        <div class="row">
+          <input class="input" id="waLink" dir="ltr" placeholder="https://…" value="${esc(state.wa.link)}" style="flex:1">
+          <label class="btn ${state.wa.uploading ? "disabled" : ""}">${state.wa.uploading ? t("جاري الرفع…") : t("رفع ملف")}<input type="file" id="waFile" hidden ${state.wa.uploading ? "disabled" : ""}></label>
+        </div>
+      </div>
+      <div class="toolbar">
+        <b>${t("{d} من {n} تم فتحها", { d: done, n: rows.length })}</b>
+        <span class="spacer"></span>
+        <button class="btn primary" data-action="wa-next" ${rows.length && done < rows.length ? "" : "disabled"}>${t("فتح التالي")}</button>
+        ${done ? `<button class="btn" data-action="wa-reset">${t("بدء من جديد")}</button>` : ""}
+      </div>
+      ${rows.length ? `<div class="wa-list">${rows.slice(0, 300).map((r) => `
+        <div class="wa-row ${opened.has(r.value) ? "is-hidden" : ""}">
+          <span class="wa-name">${esc(r.brand)}${r.contact ? ` · <small>${esc(r.contact)}</small>` : ""}</span>
+          <span dir="ltr">${esc(r.value)}</span>
+          <button class="btn sm ${opened.has(r.value) ? "" : "primary"}" data-action="wa-send" data-n="${esc(r.value)}">${opened.has(r.value) ? t("تم الفتح") : t("إرسال")}</button>
+        </div>`).join("")}</div>
+      ${rows.length > 300 ? `<p class="task-meta">${t("يظهر أول 300، وزر «فتح التالي» يمر على الكل")}</p>` : ""}` : `<p class="empty">${t("لا توجد أرقام جوال في هذه النتائج")}</p>`}
+    </section>`;
+}
+
 function renderExport(kind) {
   const f = state.exp;
   const isPhone = kind === "phone";
@@ -665,6 +719,7 @@ function renderExport(kind) {
       ${isPhone ? sel("phoneType", [["", t("كل الأنواع")], ...Object.entries(PHONE_TYPES).map(([k, v]) => [k, t(v)])], t("نوع الرقم")) : ""}
       ${isPhone ? sel("format", [["local", "05xxxxxxxx"], ["intl", "9665xxxxxxxx"]], t("صيغة الرقم")) : ""}
     </div>
+    ${isPhone ? waSection() : ""}
     <div class="toolbar">
       <b>${t(isPhone ? "{n} رقم" : "{n} إيميل", { n: rows.length })}</b>
       <span class="spacer"></span>
@@ -1141,6 +1196,22 @@ const actions = {
     try { await navigator.clipboard.writeText(el.dataset.v); toast(t("تم النسخ")); }
     catch { prompt(t("انسخ:"), el.dataset.v); }
   },
+  "wa-send": (el) => {
+    if (!waText()) return toast(t("اكتب نص الرسالة أو أضف رابط الملف أولاً"));
+    waOpen(el.dataset.n);
+    render();
+  },
+  "wa-next": () => {
+    if (!waText()) return toast(t("اكتب نص الرسالة أو أضف رابط الملف أولاً"));
+    const opened = waOpened();
+    const next = waRows().find((r) => !opened.has(r.value));
+    if (next) { waOpen(next.value); render(); }
+  },
+  "wa-reset": () => {
+    if (!confirm(t("مسح علامات «تم الفتح» والبدء من أول رقم؟"))) return;
+    try { localStorage.removeItem(WA_KEY); } catch {}
+    render();
+  },
   "exp-copy": async (el) => {
     const text = exportRows(el.dataset.kind).map((r) => r.value).join("\n");
     try { await navigator.clipboard.writeText(text); toast(t("تم النسخ")); }
@@ -1363,6 +1434,17 @@ document.addEventListener("change", (ev) => {
     return;
   }
   if (el.id === "fRentalStatus") { state.rentalStatus = el.value; render(); return; }
+  if (el.id === "waFile" && el.files[0]) {
+    const file = el.files[0];
+    if (Store.mode !== "supabase") { toast(t("رفع الملفات يحتاج قاعدة البيانات")); return; }
+    if (file.size > 50 * 1024 * 1024) { toast(t("الحد الأقصى للملف 50MB")); return; }
+    state.wa.uploading = true; render();
+    Store.uploadFile(file)
+      .then((url) => { state.wa.link = url; toast(t("تم رفع الملف")); })
+      .catch((err) => toast(t("فشل الرفع: {err}", { err: err.message || err })))
+      .finally(() => { state.wa.uploading = false; render(); });
+    return;
+  }
   if (el.dataset.action === "exp-filter") { state.exp[el.dataset.k] = el.value; render(); return; }
   if (el.dataset.action === "assign-task") {
     taskById(el.dataset.id).employeeId = el.value;
@@ -1385,6 +1467,9 @@ document.addEventListener("change", (ev) => {
 });
 
 document.addEventListener("input", (ev) => {
+  // نص الرسالة والرابط يُحفظان دون إعادة رسم الصفحة حتى لا تُغلق لوحة المفاتيح
+  if (ev.target.id === "waMsg") { state.wa.msg = ev.target.value; return; }
+  if (ev.target.id === "waLink") { state.wa.link = ev.target.value; return; }
   if (ev.target.id === "rentalSearch") {
     state.rentalSearch = ev.target.value;
     $(".rental-list").innerHTML = rentalRows();

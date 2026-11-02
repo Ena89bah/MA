@@ -406,3 +406,12 @@ img.logo { background: #dfe3e8; }
 .exp-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .exp-table th, .exp-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: start; white-space: nowrap; }
 .exp-table th { background: var(--card); position: sticky; top: 0; }
+
+/* إرسال واتساب */
+.wa-box { margin-bottom: 16px; display: grid; gap: 10px; }
+.wa-box h3 { margin: 0; }
+.wa-list { display: grid; gap: 6px; max-height: 480px; overflow-y: auto; }
+.wa-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+.wa-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.disabled { opacity: .6; pointer-events: none; }
+@media (max-width: 520px) { .wa-row { grid-template-columns: 1fr auto; } .wa-row > span[dir] { grid-row: 2; } }
